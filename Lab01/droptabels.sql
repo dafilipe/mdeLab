@@ -1,0 +1,15 @@
+SET FOREIGN_KEY_CHECKS = 0;
+
+TRUNCATE TABLE sensor_measurement;
+TRUNCATE TABLE receipt;
+TRUNCATE TABLE charging_session;
+TRUNCATE TABLE sensor;
+TRUNCATE TABLE charger_conector;
+TRUNCATE TABLE charger;
+TRUNCATE TABLE station;
+TRUNCATE TABLE car;
+TRUNCATE TABLE user;
+TRUNCATE TABLE conection_type;
+TRUNCATE TABLE pricing;
+
+SET FOREIGN_KEY_CHECKS = 1;
