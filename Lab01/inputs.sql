@@ -180,5 +180,3 @@ INSERT INTO sensor_measurement (id_sensor, date_time, measured_value) VALUES
 (6, '2025-01-06 16:20:00', 30),
 (6, '2025-01-06 16:30:00', 32),
 (6, '2025-01-06 16:40:00', 33);
-
-
