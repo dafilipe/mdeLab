@@ -54,7 +54,6 @@ CREATE TABLE IF NOT EXISTS `car` (
   PRIMARY KEY (`plate`),
   UNIQUE INDEX `plate_UNIQUE` (`plate`),
   INDEX `fk_id_user_idx` (`id_user`),
-  UNIQUE INDEX `id_user_UNIQUE` (`id_user`),
   INDEX `fk_con_type_idx` (`con_type`),
   CONSTRAINT `fk_id_user`
     FOREIGN KEY (`id_user`)
@@ -117,9 +116,9 @@ CREATE TABLE IF NOT EXISTS `charger_conector` (
 CREATE TABLE IF NOT EXISTS `sensor` (
   `id_sensor` INT NOT NULL AUTO_INCREMENT,
   `id_charger` INT NOT NULL,
-  `temperature` INT NOT NULL,
-  `power` INT NOT NULL,
   `error` BINARY(1) NOT NULL,
+  `sens_type` VARCHAR(45) NOT NULL,
+  `state` BINARY(1) NOT NULL,
   PRIMARY KEY (`id_sensor`),
   UNIQUE INDEX `id_sensor_UNIQUE` (`id_sensor`),
   INDEX `fk_id_charger_idx` (`id_charger`),
@@ -175,6 +174,21 @@ CREATE TABLE IF NOT EXISTS `receipt` (
   CONSTRAINT `fk_id_session`
     FOREIGN KEY (`id_session`)
     REFERENCES `charging_session` (`id_session`)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION
+) ENGINE = InnoDB;
+
+-- sensor_measurement
+CREATE TABLE IF NOT EXISTS `sensor_measurement` (
+  `id_measurement` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `id_sensor` INT NOT NULL,
+  `date_time` DATETIME NOT NULL,
+  `measured_value` INT NOT NULL,
+  PRIMARY KEY (`id_measurement`),
+  INDEX `fk_id_sensor_meas_idx` (`id_sensor`),
+  CONSTRAINT `fk_id_sensor_meas`
+    FOREIGN KEY (`id_sensor`)
+    REFERENCES `sensor` (`id_sensor`)
     ON DELETE NO ACTION
     ON UPDATE NO ACTION
 ) ENGINE = InnoDB;
