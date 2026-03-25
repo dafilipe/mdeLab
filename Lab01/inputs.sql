@@ -58,7 +58,7 @@ INSERT INTO charger (id_station, max_power, state) VALUES
 (1, 22, 'occupied'),
 (2, 100, 'available'),
 (2, 50, 'available'),
-(3, 22, 'maintenance'),
+(3, 22, 'available'),
 (4, 50, 'available'),
 (5, 150, 'available');
 
@@ -88,52 +88,27 @@ INSERT INTO sensor (id_charger, error, sens_type, state) VALUES
 -- =========================
 -- CHARGING SESSIONS (
 -- =========================
-INSERT INTO charging_session (id_charger, plate, entry_time, fin_time, cons_energy) VALUES
-(1, 'AA-11-AA', '2025-01-01 10:00:00', '2025-01-01 11:00:00', 20),
-(2, 'BB-22-BB', '2025-01-02 12:00:00', '2025-01-02 13:30:00', 25),
-(3, 'CC-33-CC', '2025-01-03 09:00:00', '2025-01-03 10:00:00', 18),
-(4, 'DD-44-DD', '2025-01-04 14:00:00', '2025-01-04 15:30:00', 40),
-(1, 'EE-55-EE', '2025-01-05 08:00:00', '2025-01-05 09:15:00', 22),
-(2, 'FF-66-FF', '2025-01-06 16:00:00', '2025-01-06 17:00:00', 30),
-(3, 'GG-77-GG', '2025-01-07 11:00:00', '2025-01-07 12:30:00', 28),
-(4, 'HH-88-HH', '2025-01-08 18:00:00', '2025-01-08 19:00:00', 35),
-(5, 'AA-11-AA', '2025-01-09 10:00:00', '2025-01-09 11:00:00', 19),
-(6, 'BB-22-BB', '2025-01-10 12:00:00', '2025-01-10 13:00:00', 21),
-(7, 'CC-33-CC', '2025-01-11 09:00:00', '2025-01-11 10:30:00', 33),
-(1, 'DD-44-DD', '2025-01-12 14:00:00', '2025-01-12 15:00:00', 45),
-(2, 'EE-55-EE', '2025-01-13 08:00:00', '2025-01-13 09:30:00', 20),
-(3, 'FF-66-FF', '2025-01-14 16:00:00', '2025-01-14 17:30:00', 27),
-(4, 'GG-77-GG', '2025-01-15 11:00:00', '2025-01-15 12:00:00', 25),
-(5, 'HH-88-HH', '2025-01-16 18:00:00', '2025-01-16 19:00:00', 32),
-(6, 'AA-11-AA', '2025-01-17 10:00:00', '2025-01-17 11:00:00', 23),
-(7, 'BB-22-BB', '2025-01-18 12:00:00', '2025-01-18 13:00:00', 29),
-(1, 'CC-33-CC', '2025-01-19 09:00:00', '2025-01-19 10:30:00', 31),
-(2, 'DD-44-DD', '2025-01-20 14:00:00', '2025-01-20 15:00:00', 42);
-
--- ========================= 
--- RECEIPTS
--- =========================
-INSERT INTO receipt (plate, id_user, id_session, emission_date, total_amount, state) VALUES
-('AA-11-AA', 1, 1, NOW(), 10, 'paid'),
-('BB-22-BB', 1, 2, NOW(), 12, 'paid'),
-('CC-33-CC', 2, 3, NOW(), 9, 'pending'),
-('DD-44-DD', 3, 4, NOW(), 20, 'paid'),
-('EE-55-EE', 4, 5, NOW(), 11, 'paid'),
-('FF-66-FF', 5, 6, NOW(), 15, 'pending'),
-('GG-77-GG', 5, 7, NOW(), 14, 'paid'),
-('HH-88-HH', 6, 8, NOW(), 18, 'paid'),
-('AA-11-AA', 1, 9, NOW(), 11, 'paid'),
-('BB-22-BB', 1, 10, NOW(), 13, 'paid'),
-('CC-33-CC', 2, 11, NOW(), 16, 'paid'),
-('DD-44-DD', 3, 12, NOW(), 22, 'paid'),
-('EE-55-EE', 4, 13, NOW(), 10, 'pending'),
-('FF-66-FF', 5, 14, NOW(), 17, 'paid'),
-('GG-77-GG', 5, 15, NOW(), 14, 'paid'),
-('HH-88-HH', 6, 16, NOW(), 19, 'paid'),
-('AA-11-AA', 1, 17, NOW(), 12, 'paid'),
-('BB-22-BB', 1, 18, NOW(), 15, 'pending'),
-('CC-33-CC', 2, 19, NOW(), 16, 'paid'),
-('DD-44-DD', 3, 20, NOW(), 21, 'paid');
+INSERT INTO charging_session (id_charger, plate, entry_time, cons_energy) VALUES
+(1, 'AA-11-AA', '2025-01-01 10:00:00', 20),
+(2, 'BB-22-BB', '2025-01-02 12:00:00', 25),
+(3, 'CC-33-CC', '2025-01-03 09:00:00', 18),
+(4, 'DD-44-DD', '2025-01-04 14:00:00', 40),
+(1, 'EE-55-EE', '2025-01-05 08:00:00', 22),
+(2, 'FF-66-FF', '2025-01-06 16:00:00', 30),
+(3, 'GG-77-GG', '2025-01-07 11:00:00', 28),
+(4, 'HH-88-HH', '2025-01-08 18:00:00', 35),
+(5, 'AA-11-AA', '2025-01-09 10:00:00', 19),
+(6, 'BB-22-BB', '2025-01-10 12:00:00', 21),
+(7, 'CC-33-CC', '2025-01-11 09:00:00', 33),
+(1, 'DD-44-DD', '2025-01-12 14:00:00', 45),
+(2, 'EE-55-EE', '2025-01-13 08:00:00', 20),
+(3, 'FF-66-FF', '2025-01-14 16:00:00', 27),
+(4, 'GG-77-GG', '2025-01-15 11:00:00', 25),
+(5, 'HH-88-HH', '2025-01-16 18:00:00', 32),
+(6, 'AA-11-AA', '2025-01-17 10:00:00', 23),
+(7, 'BB-22-BB', '2025-01-18 12:00:00', 29),
+(1, 'CC-33-CC', '2025-01-19 09:00:00', 31),
+(2, 'DD-44-DD', '2025-01-20 14:00:00', 42);
 
 -- =========================
 -- SENSOR MEASUREMENTS 
@@ -197,6 +172,7 @@ INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUE
 
 -- Coimbra
 ('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'ocupado'),
+('Josefino Esdrubal', 912675967, 'Josefino.Esdrubal@email.com', 'Coimbra', 'Disponivel'),
 
 -- Faro
 ('Sofia Almeida', 917890123, 'sofia.almeida@email.com', 'Faro', 'disponivel'),
@@ -204,3 +180,7 @@ INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUE
 -- Braga
 ('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado'),
 ('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel');
+
+INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUES
+('Josefino Esdrubal', 912675967, 'Josefino.Esdrubal@email.com', 'Coimbra', 'Disponivel');
+

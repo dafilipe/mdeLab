@@ -3,10 +3,10 @@ drop table tecnicalDepartment;
 
 -- RF10
 select * FROM tecnicalDepartment where local_area = "Coimbra";
-
+select * FROM tecnicalDepartment;
 -- RF11
 SELECT local_area, count(*) as total_area 
-from tecnicalDepartment group by local_area
+from tecnicalDepartment group by local_area;
 
 -- RF12
 
@@ -97,7 +97,22 @@ BEGIN
     FROM charger
     WHERE id_charger = p_id_charger
     LIMIT 1;
+	
+	SELECT id_station
+    INTO v_id_station
+    FROM charger
+    WHERE id_charger = p_id_charger
+    LIMIT 1;
 
+    IF v_id_station IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Charger não encontrado.';
+    END IF;
+    
+    -- alterar estado do posto para maintenance
+    UPDATE station
+    SET state = 'available'
+    WHERE id_station = v_id_station;
     IF v_id_station IS NULL THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Charger não encontrado.';
@@ -112,6 +127,7 @@ BEGIN
 END$$
 
 DELIMITER ;
+drop procedure libertar_tecnico_manutencao;
 DELIMITER $$
 
 CREATE TRIGGER trg_charger_sai_manutencao
@@ -125,4 +141,15 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+UPDATE tecnicalDepartment
+SET estado = 'disponivel'
+WHERE id_tecnico > 0;
+
+
+update charger set state = "available" WHERE id_charger = 3 ;
+select * from charger;
+select * from station;
+SET SQL_SAFE_UPDATES = 0;
+select * FROM tecnicalDepartment;
 
