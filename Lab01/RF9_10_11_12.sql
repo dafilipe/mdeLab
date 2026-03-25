@@ -2,7 +2,7 @@
 drop table tecnicalDepartment;
 
 -- RF10
-select * FROM tecnicalDepartment where local_area = "Coimbra";
+	select * FROM tecnicalDepartment where local_area = "Coimbra";
 select * FROM tecnicalDepartment;
 -- RF11
 SELECT local_area, count(*) as total_area 

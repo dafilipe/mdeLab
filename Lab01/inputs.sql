@@ -181,6 +181,3 @@ INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUE
 ('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado'),
 ('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel');
 
-INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUES
-('Josefino Esdrubal', 912675967, 'Josefino.Esdrubal@email.com', 'Coimbra', 'Disponivel');
-

@@ -13,7 +13,7 @@ CREATE TABLE alert (
 -- TRIGGER RF7
 DELIMITER $$
 CREATE TRIGGER trg_high_energy_alert
-AFTER INSERT ON charging_session
+AFTER update ON charging_session
 FOR EACH ROW
 BEGIN
     DECLARE energy_limit DECIMAL(10,2) DEFAULT 50.00;
@@ -105,19 +105,7 @@ SET SQL_SAFE_UPDATES = 0;
 SELECT * FROM pricing;
 SELECT * FROM charging_session;
 
--- nao deve criar alerta
-
-INSERT INTO charging_session (id_charger, plate, entry_time, fin_time, cons_energy)
-VALUES (1, 'AA-11-AA', '2025-01-01 10:00:00', '2025-01-01 11:00:00', 20);
-
-SELECT * FROM alert;
-
-INSERT INTO charging_session (id_charger, plate, entry_time, fin_time, cons_energy)
-VALUES (1, 'AA-11-AA', '2025-01-01 10:00:00', '2025-01-01 11:00:00', 75.00);
-
-INSERT INTO charging_session (id_charger, plate, entry_time, fin_time, cons_energy)
-VALUES (1, 'AA-11-AA', '2025-01-01 11:00:00', '2025-01-01 12:00:00', 50.00);
-
+drop trigger trg_high_energy_alert;
 
 -- teste rf8
 ALTER TABLE charging_session
@@ -132,9 +120,11 @@ ORDER BY id_session DESC
 LIMIT 1;
 
 UPDATE charging_session
-SET fin_time = '2025-01-01 12:00:00',
-    cons_energy = 50.00
-WHERE id_session = 35;
+SET fin_time = '2025-01-31 12:00:00',
+    cons_energy = 75.00
+WHERE id_session = 4;
 
+select * from charging_session where fin_time is not null; 
 SELECT * FROM receipt;
+select * from alert;
 
