@@ -11,5 +11,6 @@ TRUNCATE TABLE car;
 TRUNCATE TABLE user;
 TRUNCATE TABLE conection_type;
 TRUNCATE TABLE pricing;
+TRUNCATE TABLE tecnicalDepartment;
 
 SET FOREIGN_KEY_CHECKS = 1;
