@@ -1,10 +1,6 @@
 -- RF9
 drop table tecnicalDepartment;
 
-SELECT posto_atribuido 
-FROM tecnicalDepartment
-WHERE posto_atribuido IS NOT NULL
-AND posto_atribuido NOT IN (SELECT id_station FROM station);
 -- RF10
 select * FROM tecnicalDepartment where local_area = "Coimbra";
 
