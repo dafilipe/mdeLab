@@ -181,22 +181,26 @@ INSERT INTO sensor_measurement (id_sensor, date_time, measured_value) VALUES
 (6, '2025-01-06 16:30:00', 32),
 (6, '2025-01-06 16:40:00', 33);
 
+ALTER TABLE tecnicalDepartment
+MODIFY id_tecnico INT NOT NULL AUTO_INCREMENT;
 
-INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado, posto_atribuido) VALUES
+
+INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUES
 -- Lisboa
-('João Silva', 912345678, 'joao.silva@email.com', 'Lisboa', 'disponivel', 1),
-('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'ocupado', 1),
+('João Silva', 912345678, 'joao.silva@email.com', 'Lisboa', 'disponivel'),
+
+('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'ocupado'),
 
 -- Porto
-('Rui Pereira', 914567890, 'rui.pereira@email.com', 'Porto', 'disponivel', 2),
-('Marta Lopes', 915678901, 'marta.lopes@email.com', 'Porto', 'indisponivel', 2),
+('Rui Pereira', 914567890, 'rui.pereira@email.com', 'Porto', 'disponivel'),
+('Marta Lopes', 915678901, 'marta.lopes@email.com', 'Porto', 'indisponivel'),
 
 -- Coimbra
-('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'ocupado', 3),
+('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'ocupado'),
 
 -- Faro
-('Sofia Almeida', 917890123, 'sofia.almeida@email.com', 'Faro', 'disponivel', 4),
+('Sofia Almeida', 917890123, 'sofia.almeida@email.com', 'Faro', 'disponivel'),
 
 -- Braga
-('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado', 5),
-('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel', 5),
+('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado'),
+('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel');
