@@ -94,6 +94,7 @@ DELIMITER ;
 
 
 -- testes
+-- rf7
 DELETE FROM alert;
 DELETE FROM receipt;
 SET SQL_SAFE_UPDATES = 0;
