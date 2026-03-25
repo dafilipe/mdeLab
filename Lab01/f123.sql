@@ -20,12 +20,12 @@ WHERE
         WHERE id_user = (
             SELECT id_user 
             FROM user 
-            WHERE name = 'Diogo Silva'
+            WHERE name = 'Diogo Silva' -- Alterar nome aqui
         )
     )
     -- Filtro de Intervalo de Tempo
     -- Formatdo data ANO-MES-DIA
-    AND entry_time BETWEEN '2025-01-01 00:00:00' AND '2025-01-15 23:59:59'
+    AND entry_time BETWEEN '2025-01-01 00:00:00' AND '2025-01-15 23:59:59' -- Alterar datas aqui
 ORDER BY 
     -- Ordena por chegada mais recente em cima
     entry_time DESC;
@@ -42,11 +42,11 @@ SELECT
 FROM 
     charging_session
 WHERE 
-    -- Filtra carregadores que pertencem ao posto com ID : '1'
+    -- Filtra carregadores que pertencem ao posto com ID : x
     id_charger IN (
         SELECT id_charger 
         FROM charger 
-        WHERE id_station = 1
+        WHERE id_station = 1 -- Mudar posto aqui
     )
 ORDER BY 
 	-- Ordena por chegada mais recente em cima

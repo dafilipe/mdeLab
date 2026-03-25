@@ -4,19 +4,31 @@ SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 
-DROP SCHEMA IF EXISTS `voltWay_db`;
-CREATE SCHEMA IF NOT EXISTS `voltWay_db` DEFAULT CHARACTER SET utf8;
-USE `voltWay_db`;
+-- -----------------------------------------------------
+-- Schema voltWay_db
+-- -----------------------------------------------------
+DROP SCHEMA IF EXISTS `voltWay_db` ;
 
--- pricing
+-- -----------------------------------------------------
+-- Schema voltWay_db
+-- -----------------------------------------------------
+CREATE SCHEMA IF NOT EXISTS `voltWay_db` DEFAULT CHARACTER SET utf8 ;
+USE `voltWay_db` ;
+
+-- -----------------------------------------------------
+-- Table `pricing`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `pricing` (
   `type` VARCHAR(45) NOT NULL,
   `price_per_hour` INT NOT NULL,
   PRIMARY KEY (`type`),
-  UNIQUE INDEX `type_UNIQUE` (`type`)
-) ENGINE = InnoDB;
+  UNIQUE INDEX `type_UNIQUE` (`type` ASC))
+ENGINE = InnoDB;
 
--- user
+
+-- -----------------------------------------------------
+-- Table `user`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `user` (
   `id_user` INT NOT NULL AUTO_INCREMENT,
   `name` VARCHAR(45) NOT NULL,
@@ -25,24 +37,30 @@ CREATE TABLE IF NOT EXISTS `user` (
   `register_date` DATE NOT NULL,
   `type` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`id_user`),
-  UNIQUE INDEX `phone_num_UNIQUE` (`phone_num`),
-  INDEX `fk_type_idx` (`type`),
-  UNIQUE INDEX `id_user_UNIQUE` (`id_user`),
+  UNIQUE INDEX `phone_num_UNIQUE` (`phone_num` ASC),
+  INDEX `fk_type_idx` (`type` ASC),
+  UNIQUE INDEX `id_user_UNIQUE` (`id_user` ASC),
   CONSTRAINT `fk_type`
     FOREIGN KEY (`type`)
     REFERENCES `pricing` (`type`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- conection_type
+
+-- -----------------------------------------------------
+-- Table `conection_type`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `conection_type` (
   `con_type` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`con_type`),
-  UNIQUE INDEX `con_type_UNIQUE` (`con_type`)
-) ENGINE = InnoDB;
+  UNIQUE INDEX `con_type_UNIQUE` (`con_type` ASC))
+ENGINE = InnoDB;
 
--- car
+
+-- -----------------------------------------------------
+-- Table `car`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `car` (
   `plate` VARCHAR(8) NOT NULL,
   `id_user` INT NOT NULL,
@@ -52,9 +70,9 @@ CREATE TABLE IF NOT EXISTS `car` (
   `man_year` YEAR(4) NOT NULL,
   `con_type` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`plate`),
-  UNIQUE INDEX `plate_UNIQUE` (`plate`),
-  INDEX `fk_id_user_idx` (`id_user`),
-  INDEX `fk_con_type_idx` (`con_type`),
+  UNIQUE INDEX `plate_UNIQUE` (`plate` ASC),
+  INDEX `fk_id_user_idx` (`id_user` ASC),
+  INDEX `fk_con_type_idx` (`con_type` ASC),
   CONSTRAINT `fk_id_user`
     FOREIGN KEY (`id_user`)
     REFERENCES `user` (`id_user`)
@@ -64,10 +82,13 @@ CREATE TABLE IF NOT EXISTS `car` (
     FOREIGN KEY (`con_type`)
     REFERENCES `conection_type` (`con_type`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- station
+
+-- -----------------------------------------------------
+-- Table `station`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `station` (
   `id_station` INT NOT NULL AUTO_INCREMENT,
   `city` VARCHAR(45) NOT NULL,
@@ -75,31 +96,37 @@ CREATE TABLE IF NOT EXISTS `station` (
   `gps` VARCHAR(45) NOT NULL,
   `state` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`id_station`),
-  UNIQUE INDEX `id_station_UNIQUE` (`id_station`)
-) ENGINE = InnoDB;
+  UNIQUE INDEX `id_station_UNIQUE` (`id_station` ASC))
+ENGINE = InnoDB;
 
--- charger
+
+-- -----------------------------------------------------
+-- Table `charger`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `charger` (
   `id_charger` INT NOT NULL AUTO_INCREMENT,
   `id_station` INT NOT NULL,
   `max_power` INT NOT NULL,
   `state` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`id_charger`),
-  UNIQUE INDEX `idcharger_UNIQUE` (`id_charger`),
-  INDEX `fk_id_station_idx` (`id_station`),
+  UNIQUE INDEX `idcharger_UNIQUE` (`id_charger` ASC),
+  INDEX `fk_id_station_idx` (`id_station` ASC),
   CONSTRAINT `fk_id_station`
     FOREIGN KEY (`id_station`)
     REFERENCES `station` (`id_station`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- charger_conector
+
+-- -----------------------------------------------------
+-- Table `charger_conector`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `charger_conector` (
   `id_charger` INT NOT NULL,
   `con_type` VARCHAR(45) NOT NULL,
-  INDEX `fk_id_charger_idx` (`id_charger`),
-  INDEX `fk_con_type_idx` (`con_type`),
+  INDEX `fk_id_charger_idx` (`id_charger` ASC),
+  INDEX `fk_con_type_idx` (`con_type` ASC),
   CONSTRAINT `fk_id_charger`
     FOREIGN KEY (`id_charger`)
     REFERENCES `charger` (`id_charger`)
@@ -109,10 +136,13 @@ CREATE TABLE IF NOT EXISTS `charger_conector` (
     FOREIGN KEY (`con_type`)
     REFERENCES `conection_type` (`con_type`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- sensor
+
+-- -----------------------------------------------------
+-- Table `sensor`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sensor` (
   `id_sensor` INT NOT NULL AUTO_INCREMENT,
   `id_charger` INT NOT NULL,
@@ -120,16 +150,19 @@ CREATE TABLE IF NOT EXISTS `sensor` (
   `sens_type` VARCHAR(45) NOT NULL,
   `state` BINARY(1) NOT NULL,
   PRIMARY KEY (`id_sensor`),
-  UNIQUE INDEX `id_sensor_UNIQUE` (`id_sensor`),
-  INDEX `fk_id_charger_idx` (`id_charger`),
+  UNIQUE INDEX `id_sensor_UNIQUE` (`id_sensor` ASC),
+  INDEX `fk_id_charger_idx` (`id_charger` ASC),
   CONSTRAINT `fk_id_charger_sensor`
     FOREIGN KEY (`id_charger`)
     REFERENCES `charger` (`id_charger`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- charging_session
+
+-- -----------------------------------------------------
+-- Table `charging_session`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `charging_session` (
   `id_session` INT NOT NULL AUTO_INCREMENT,
   `id_charger` INT NOT NULL,
@@ -138,9 +171,9 @@ CREATE TABLE IF NOT EXISTS `charging_session` (
   `fin_time` DATETIME NOT NULL,
   `cons_energy` INT NOT NULL,
   PRIMARY KEY (`id_session`),
-  UNIQUE INDEX `id_session_UNIQUE` (`id_session`),
-  INDEX `fk_id_charger_idx` (`id_charger`),
-  INDEX `fk_plate_idx` (`plate`),
+  UNIQUE INDEX `id_session_UNIQUE` (`id_session` ASC),
+  INDEX `fk_id_charger_idx` (`id_charger` ASC),
+  INDEX `fk_plate_idx` (`plate` ASC),
   CONSTRAINT `fk_id_charger_session`
     FOREIGN KEY (`id_charger`)
     REFERENCES `charger` (`id_charger`)
@@ -150,10 +183,13 @@ CREATE TABLE IF NOT EXISTS `charging_session` (
     FOREIGN KEY (`plate`)
     REFERENCES `car` (`plate`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- receipt
+
+-- -----------------------------------------------------
+-- Table `receipt`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `receipt` (
   `id_receipt` INT NOT NULL AUTO_INCREMENT,
   `plate` VARCHAR(8) NOT NULL,
@@ -163,9 +199,9 @@ CREATE TABLE IF NOT EXISTS `receipt` (
   `total_amount` INT NOT NULL,
   `state` VARCHAR(45) NOT NULL,
   PRIMARY KEY (`id_receipt`),
-  UNIQUE INDEX `idreceipt_UNIQUE` (`id_receipt`),
-  INDEX `fk_id_user_idx` (`id_user`),
-  UNIQUE INDEX `id_session_UNIQUE` (`id_session`),
+  UNIQUE INDEX `idreceipt_UNIQUE` (`id_receipt` ASC),
+  INDEX `fk_id_user_idx` (`id_user` ASC),
+  UNIQUE INDEX `id_session_UNIQUE` (`id_session` ASC),
   CONSTRAINT `fk_id_user_receipt`
     FOREIGN KEY (`id_user`)
     REFERENCES `user` (`id_user`)
@@ -175,23 +211,45 @@ CREATE TABLE IF NOT EXISTS `receipt` (
     FOREIGN KEY (`id_session`)
     REFERENCES `charging_session` (`id_session`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
 
--- sensor_measurement
+
+-- -----------------------------------------------------
+-- Table `sensor_measurement`
+-- -----------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sensor_measurement` (
   `id_measurement` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `id_sensor` INT NOT NULL,
   `date_time` DATETIME NOT NULL,
   `measured_value` INT NOT NULL,
   PRIMARY KEY (`id_measurement`),
-  INDEX `fk_id_sensor_meas_idx` (`id_sensor`),
+  INDEX `fk_id_sensor_meas_idx` (`id_sensor` ASC),
   CONSTRAINT `fk_id_sensor_meas`
     FOREIGN KEY (`id_sensor`)
     REFERENCES `sensor` (`id_sensor`)
     ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-) ENGINE = InnoDB;
+    ON UPDATE NO ACTION)
+ENGINE = InnoDB;
+
+
+-- -----------------------------------------------------
+-- Table `tecnicalDepartment`
+-- -----------------------------------------------------
+CREATE TABLE IF NOT EXISTS `tecnicalDepartment` (
+  `id_tecnico` INT NOT NULL AUTO_INCREMENT,
+  `nome` VARCHAR(100) NOT NULL,
+  `telefone` INT NOT NULL,
+  `email` VARCHAR(45) NOT NULL,
+  `local_area` VARCHAR(45) NOT NULL,
+  `estado` ENUM('disponivel', 'ocupado', 'indisponivel') NOT NULL DEFAULT 'disponivel',
+  `posto_atribuido` INT NULL DEFAULT NULL,
+  PRIMARY KEY (`id_tecnico`),
+  UNIQUE INDEX `id_tecnico_UNIQUE` (`id_tecnico` ASC),
+  UNIQUE INDEX `telefone_UNIQUE` (`telefone` ASC),
+  UNIQUE INDEX `email_UNIQUE` (`email` ASC))
+ENGINE = InnoDB;
+
 
 SET SQL_MODE=@OLD_SQL_MODE;
 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
