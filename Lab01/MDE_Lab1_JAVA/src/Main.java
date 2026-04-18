@@ -371,7 +371,7 @@ public class Main {
         System.out.print("Introduza o nome da cidade: ");
         String city = scanner.nextLine();
 
-        String query = "select * FROM tecnicalDepartment where local_area = \""+ city +"\"";
+        String query = "select id_tecnico AS Tecnico, nome AS Nome, telefone AS Telefone, email AS Email, local_area AS Area, estado AS Estado, posto_atribuido AS 'Carregador Atribuido' FROM tecnicalDepartment where local_area = \""+ city +"\"";
         ResultSet rs = MySQL_Integration.executeQuery(conn, query);
 
         ResultSetMetaData metaData = rs.getMetaData();   //gets info about the columns
