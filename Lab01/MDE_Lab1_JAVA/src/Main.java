@@ -49,14 +49,14 @@ public class Main {
     private static void menu(){
         System.out.println("\n===== MENU PRINCIPAL =====");
         System.out.println("1 - (RF1) Visualizar histórico de sessões de um user.");
-        System.out.println("2 - (RF2) Visualizar todas as sessoes de um posto.");
+        System.out.println("2 - (RF2) Visualizar todas as sessoes de uma Estacao.");
         System.out.println("3 - (RF3) Visualizar todas as sessoes de carregamento.");
         System.out.println("4 - (RF4) Visualizar Carregadores mais usados.");
         System.out.println("5 - (RF5) Visualizar Consumo dos users.");
         System.out.println("6 - (RF6) Visualizar medicoes dos sensores.");
         System.out.println("10- (RF10) Visualizar Tecnicos de uma cidade.");
         System.out.println("11- (RF11) Visualizar numero de Tecnicos por cidade.");
-        System.out.println("12- (---) Query.");
+        System.out.println("13- (---) Query.");
         System.out.println("");
         System.out.println("0 - Sair.");
         System.out.println("");
@@ -101,7 +101,7 @@ public class Main {
                 case 11:
                     viewTechniciansNumPerCity(conn);
                     break;
-                case 12:
+                case 13:
                     query(conn);
                     break;
                 

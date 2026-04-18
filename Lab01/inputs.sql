@@ -1,5 +1,5 @@
 USE voltWay_db;
-
+SET SQL_SAFE_UPDATES = 0;
 -- =========================
 -- PRICING
 -- =========================
@@ -371,7 +371,6 @@ END$$
 DELIMITER ;
 
 DELIMITER $$
-
 CREATE PROCEDURE libertar_tecnico_manutencao(IN p_id_charger INT)
 BEGIN
     DECLARE v_id_station INT DEFAULT NULL;
@@ -408,13 +407,10 @@ BEGIN
     SET estado = 'disponivel',
         posto_atribuido = NULL
     WHERE posto_atribuido = v_id_station;
-
 END$$
-
 DELIMITER ;
-drop procedure libertar_tecnico_manutencao;
-DELIMITER $$
 
+DELIMITER $$
 CREATE TRIGGER trg_charger_sai_manutencao
 AFTER UPDATE ON charger
 FOR EACH ROW
