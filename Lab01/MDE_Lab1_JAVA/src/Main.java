@@ -56,6 +56,7 @@ public class Main {
         System.out.println("6 - (RF6) Visualizar medicoes dos sensores.");
         System.out.println("10- (RF10) Visualizar Tecnicos de uma cidade.");
         System.out.println("11- (RF11) Visualizar numero de Tecnicos por cidade.");
+        System.out.println("12- (---) Query.");
         System.out.println("");
         System.out.println("0 - Sair.");
         System.out.println("");
@@ -99,6 +100,9 @@ public class Main {
                     break;
                 case 11:
                     viewTechniciansNumPerCity(conn);
+                    break;
+                case 12:
+                    query(conn);
                     break;
                 
                 case 0:
@@ -371,7 +375,7 @@ public class Main {
         System.out.print("Introduza o nome da cidade: ");
         String city = scanner.nextLine();
 
-        String query = "select id_tecnico AS Tecnico, nome AS Nome, telefone AS Telefone, email AS Email, local_area AS Area, estado AS Estado, posto_atribuido AS 'Carregador Atribuido' FROM tecnicalDepartment where local_area = \""+ city +"\"";
+        String query = "select id_tecnico AS Tecnico, nome AS Nome, telefone AS Telefone, email AS Email, local_area AS Area, estado AS Estado, posto_atribuido AS '10Carregador Atribuido' FROM tecnicalDepartment where local_area = \""+ city +"\"";
         ResultSet rs = MySQL_Integration.executeQuery(conn, query);
 
         ResultSetMetaData metaData = rs.getMetaData();   //gets info about the columns
@@ -409,6 +413,33 @@ public class Main {
         int columnCount = metaData.getColumnCount();     //gets the number of columns
 
         System.out.println("\n--- Tecnicos Por Cidade ---");
+        
+        // Header
+        for (int i = 1; i <= columnCount; i++) {
+            System.out.printf("%-25s", metaData.getColumnLabel(i));
+        }
+        System.out.println();
+        System.out.println();
+
+        while (rs.next()) {
+            for (int i = 1; i <= columnCount; i++) {
+                String value = rs.getString(i);
+                System.out.printf("%-25s", value == null ? "null" : value);
+            }
+            System.out.println();
+        }
+        rs.close();
+    }
+
+    public static void query(Connection conn) throws SQLException {
+        System.out.print("Query: ");
+        String query = scanner.nextLine();
+        ResultSet rs = MySQL_Integration.executeQuery(conn, query);
+
+        ResultSetMetaData metaData = rs.getMetaData();   //gets info about the columns
+        int columnCount = metaData.getColumnCount();     //gets the number of columns
+
+        System.out.println("\n--- Result ---");
         
         // Header
         for (int i = 1; i <= columnCount; i++) {

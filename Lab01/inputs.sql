@@ -44,18 +44,18 @@ INSERT INTO car VALUES
 -- STATIONS 
 -- =========================
 INSERT INTO station (city, address, gps, state) VALUES
-('Lisboa', 'Av. Liberdade', '38.72,-9.13', 'active'),
-('Porto', 'Rua Santa Catarina', '41.15,-8.61', 'active'),
-('Coimbra', 'Praça da República', '40.21,-8.42', 'active'),
-('Faro', 'Centro', '37.01,-7.93', 'maintenance'),
-('Braga', 'Av. Central', '41.55,-8.42', 'active');
+('Lisboa', 'Av. Liberdade', '38.72,-9.13', 'available'),
+('Porto', 'Rua Santa Catarina', '41.15,-8.61', 'available'),
+('Coimbra', 'Praça da República', '40.21,-8.42', 'available'),
+('Faro', 'Centro', '37.01,-7.93', 'available'),
+('Braga', 'Av. Central', '41.55,-8.42', 'available');
 
 -- =========================
 -- CHARGERS 
 -- =========================
 INSERT INTO charger (id_station, max_power, state) VALUES
 (1, 50, 'available'),
-(1, 22, 'occupied'),
+(1, 22, 'available'),
 (2, 100, 'available'),
 (2, 50, 'available'),
 (3, 22, 'available'),
@@ -164,21 +164,21 @@ INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUE
 -- Lisboa
 ('João Silva', 912345678, 'joao.silva@email.com', 'Lisboa', 'disponivel'),
 
-('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'ocupado'),
+('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'disponivel'),
 
 -- Porto
 ('Rui Pereira', 914567890, 'rui.pereira@email.com', 'Porto', 'disponivel'),
 ('Marta Lopes', 915678901, 'marta.lopes@email.com', 'Porto', 'indisponivel'),
 
 -- Coimbra
-('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'ocupado'),
+('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'disponivel'),
 ('Josefino Esdrubal', 912675967, 'Josefino.Esdrubal@email.com', 'Coimbra', 'Disponivel'),
 
 -- Faro
 ('Sofia Almeida', 917890123, 'sofia.almeida@email.com', 'Faro', 'disponivel'),
 
 -- Braga
-('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado'),
+('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'disponivel'),
 ('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel');
 
 -- Criar View do RF6

@@ -134,11 +134,9 @@ SELECT * FROM view_sensor_meas1;
 
 
 -- rf7 e 8
+select * from charging_session;
 
-UPDATE charging_session
-SET fin_time = '2025-01-31 12:00:00',
-    cons_energy = 68.00
-WHERE id_session = 6;
+UPDATE charging_session SET fin_time = '2025-01-31 12:00:00', cons_energy = 68.00 WHERE id_session = 6;
 
 select * from charging_session where fin_time is not null; 
 SELECT * FROM receipt;
@@ -148,18 +146,21 @@ select * from alert;
 select * FROM tecnicalDepartment where local_area = "Coimbra";
 
 -- rf11
-SELECT local_area, count(*) as total_area 
-from tecnicalDepartment group by local_area;
+SELECT local_area, count(*) as total_area from tecnicalDepartment group by local_area;
 
 -- rf 12
-UPDATE tecnicalDepartment
-SET estado = 'disponivel'
-WHERE id_tecnico > 0;
-
-update charger set state = "available" WHERE id_charger = 3 ;
 select * from charger;
 select * from station;
 select * FROM tecnicalDepartment;
 
+update charger set state = "maintenance" WHERE id_charger = 3 ;
+select * from charger;
+select * from station;
+select * FROM tecnicalDepartment;
 
+update charger set state = "available" WHERE id_charger = 3 ;
+
+select * from charger;
+select * from station;
+select * FROM tecnicalDepartment;
 -- fazer um select para mostrar os rf todos juntos
