@@ -1,4 +1,105 @@
-% Ficheiro principal do LAB02
+% Knowledge base template
+
+% robots(ID, Type, Volume_cap, Weight_cap, Vel, Max_bat, Cons)              
+% op_status(Robot_ID, Location, Batt_Level, Mission_status, Load_ID)        
+% supplier(Node_ID, Name, List_of_Products)                                 FEITO
+% hub(Node_ID, Name, Status, Charge_speed)                                  FEITO
+% charge_station(Node_ID, Name, Status, Charge_speed)                       FEITO
+% customer(Node_ID, Name)                                                   FEITO
+% load(Load_ID, Order_ID, Volume, Weight)                                   
+% order(Order_ID, Destination_node, Urgency, List_of_Products, Status)      
+% product(Product_ID, Name, Volume, Weight)                                 FEITO
+% node(Node_ID, Address)                                                    FEITO
+% link(NodeID_A, NodeID_B, Dist, Tipo).                                     FEITO
+
+% DATA LOADING
+% product(Product_ID, Name, Volume, Weight)
+product(1, 'Molly', 1, 1).
+product(2, 'Cocaine', 1, 1).
+product(3, 'Weed', 1, 1).
+product(4, 'LSD', 1, 1).
+product(5, 'Heroin', 1, 1).
+product(6, 'Shrooms', 1, 1).
+
+% supplier(Node_ID, Name, List_of_Products)
+supplier(1, 'Supplier A', [1, 2]).
+supplier(2, 'Supplier B', [3, 5]).
+supplier(3, 'Supplier C', [4, 6]).
+
+% hub(Node_ID, Name, Status, Charge_speed)
+hub(4, 'Hub A', 'Available', 10).
+hub(5, 'Hub B', 'Occupied', 15).
+
+% charge_station(Node_ID, Name, Status, Charge_speed)
+charge_station(6, 'Charge Station A', 'Available', 10).
+charge_station(7, 'Charge Station B', 'Occupied', 15).
+charge_station(8, 'Charge Station C', 'Available', 20).
+
+% customer(Node_ID, Name)
+customer(9, 'Customer A').
+customer(10, 'King pin').
+customer(11, 'Customer C').
+customer(12, 'Customer D').
+customer(13, 'Customer E').
+customer(14, 'Customer F').
+customer(15, 'Customer G').
+customer(16, 'Customer H').
+customer(17, 'Customer I').
+customer(18, 'Customer J').
+
+% node(Node_ID, Address)
+node(1, 'Place 1').
+node(2, 'Place 2').
+node(3, 'Place 3').
+node(4, 'Place 4').
+node(5, 'Place 5').
+node(6, 'Place 6').
+node(7, 'Place 7').
+node(8, 'Place 8').
+node(9, 'Place 9').
+node(10, 'Fortress').
+node(11, 'Place 11').
+node(12, 'Place 12').
+node(13, 'Place 13').
+node(14, 'Place 14').
+node(15, 'Place 15').
+node(16, 'Place 16').
+node(17, 'Place 17').
+node(18, 'Place 18').
+
+% link(NodeID_A, NodeID_B, Dist, Tipo)
+link(1,4,80,'Mixed').
+link(1,6,25,'Mixed').
+link(1,9,20,'Aerial').
+link(1,10,90,'Aerial').
+link(2,4,60,'Mixed').
+link(2,16,10,'Aerial').
+link(2,17,50,'Mixed').
+link(3,18,60,'Aerial').
+link(3,15,30,'Mixed').
+link(3,10,90,'Aerial').
+link(4,13,15,'Mixed').
+link(4,11,25,'Aerial').
+link(5,9,20,'Mixed').
+link(5,10,45,'Ground').
+link(5,15,30,'Mixed').
+link(5,8,25,'Aerial').
+link(5,12,25,'Ground').
+link(6,11,15,'Mixed').
+link(6,12,20,'Mixed').
+link(7,16,20,'Mixed').
+link(7,13,30,'Ground').
+link(7,11,40,'Mixed').
+link(7,17,20,'Mixed').
+link(8,14,35,'Mixed').
+link(8,15,20,'Mixed').
+link(9,12,15,'Mixed').
+link(11,14,20,'Mixed').
+link(12,14,25,'Ground').
+link(13,16,15,'Mixed').
+link(14,17,30,'Mixed').
+link(14,18,40,'Aerial').
+link(17,18,25,'Ground').
 
 :- discontiguous execute/1.
 
