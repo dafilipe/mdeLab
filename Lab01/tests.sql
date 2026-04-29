@@ -156,7 +156,7 @@ UPDATE tecnicalDepartment
 SET estado = 'disponivel'
 WHERE id_tecnico > 0;
 
-update charger set state = "available" WHERE id_charger = 3 ;
+update charger set state = "" WHERE id_charger = 3 ;
 select * from charger;
 select * from station;
 select * FROM tecnicalDepartment;

@@ -20,39 +20,91 @@
 % product(ProdId, [IdSupplier1, IdSupplier2, ...]).
 
 
-%Menu
+% Entry point
 start :-
     menu.
 
 menu :-
-    repeat,              % Magic predicate that allows backtracking
+    repeat,
     nl,
-    write('--- GENERIC PROLOG MENU ---'), nl,
-    write('1. Say Hello'), nl,
-    write('2. Display Current Date'), nl,
-    write('3. Reveal Secret Message'), nl,
+    write('--- NETWORK MANAGEMENT SYSTEM ---'), nl,
+    write('1. Manage Network Nodes'), nl,
+    write('2. Manage Autonomous Robots'), nl,
+    write('3. Manage Connections Between Nodes'), nl,
+    write('4. Update Robot Status'), nl,
     write('0. Exit'), nl,
     write('Enter your choice: '),
-    read(Choice),        % User must type choice followed by a dot (e.g., 1.)
+    read(Choice),
     execute(Choice),
-    Choice == 0,         % Loop terminates when Choice is 0
+    Choice == 0,
     !.
 
-% Logic for each choice
+% -------- RF1 --------
 execute(1) :-
-    write('Hello there! Hope you are having a logical day.'), nl.
+    nl,
+    write('--- Network Nodes ---'), nl,
+    write('1. Add Node'), nl,
+    write('2. Modify Node'), nl,
+    write('3. Remove Node'), nl,
+    read(SubChoice),
+    handle_node(SubChoice).
 
+handle_node(1) :-
+    write('Adding node...'), nl.
+handle_node(2) :-
+    write('Modifying node...'), nl.
+handle_node(3) :-
+    write('Removing node...'), nl.
+handle_node(_) :-
+    write('Invalid option.'), nl.
+
+% -------- RF2 --------
 execute(2) :-
-    get_time(Stamp),
-    stamp_date_time(Stamp, DateTime, local),
-    write('Current local time/date: '), write(DateTime), nl.
+    nl,
+    write('--- Autonomous Robots ---'), nl,
+    write('1. Add Robot'), nl,
+    write('2. Modify Robot'), nl,
+    write('3. Remove Robot'), nl,
+    read(SubChoice),
+    handle_robot(SubChoice).
 
+handle_robot(1) :-
+    write('Adding robot...'), nl.
+handle_robot(2) :-
+    write('Modifying robot...'), nl.
+handle_robot(3) :-
+    write('Removing robot...'), nl.
+handle_robot(_) :-
+    write('Invalid option.'), nl.
+
+% -------- RF3 --------
 execute(3) :-
-    write('The secret to Prolog is understanding recursion!'), nl.
+    nl,
+    write('--- Connections ---'), nl,
+    write('1. Add Connection'), nl,
+    write('2. Modify Connection'), nl,
+    write('3. Remove Connection'), nl,
+    read(SubChoice),
+    handle_connection(SubChoice).
 
+handle_connection(1) :-
+    write('Adding connection...'), nl.
+handle_connection(2) :-
+    write('Modifying connection...'), nl.
+handle_connection(3) :-
+    write('Removing connection...'), nl.
+handle_connection(_) :-
+    write('Invalid option.'), nl.
+
+% -------- RF4 --------
+execute(4) :-
+    nl,
+    write('Updating robot status...'), nl.
+
+% Exit
 execute(0) :-
     write('Exiting... Goodbye!'), nl.
 
-% Catch-all for invalid inputs
+% Catch-all
 execute(_) :-
     write('Invalid selection, please try again.'), nl.
