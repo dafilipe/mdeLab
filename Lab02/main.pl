@@ -11,6 +11,12 @@
 % product(Product_ID, Name, Volume L, Weight kg)                         FEITO
 % node(Node_ID, Address)                                                    FEITO
 % link(NodeID_A, NodeID_B, Dist, Tipo).                                     FEITO
+:- dynamic node/2.
+:- dynamic robot/7.
+:- dynamic link/4.
+:- dynamic op_status/5.
+:- dynamic order/5.
+:- dynamic load/4.
 
 % DATA LOADING
 
@@ -62,7 +68,7 @@ op_status(7, 6, 60, transporting, 3).
 op_status(8, 11, 40, paused, 4).        
 op_status(9, 15, 75, transporting, 5).   
 op_status(10, 10, 100, idle, none).       
-   
+
 op_status(11, 13, 15, charging, none).       
 op_status(12, 10, 100, idle, none).          
 op_status(13, 7, 50, transporting, 6).  
@@ -163,9 +169,6 @@ link(17,18,25,'Ground').
 
 
 
-
-
-
 % -------------------------------
 % Entry point
 % -------------------------------
@@ -176,14 +179,19 @@ start :-
 menu :-
     repeat,
     nl,
-    write('--- NETWORK MANAGEMENT SYSTEM ---'), nl,
-    write('1. Manage Network Nodes'), nl,
-    write('2. Manage Autonomous Robots'), nl,
-    write('3. Manage Connections Between Nodes'), nl,
-    write('4. Update Robot Status'), nl,
-    write('5. Manage Delivery Orders'), nl,
+    write('--- FORERO TORERO CARTEL, NETWORK MANAGEMENT SYSTEM ---'), nl,
+    write('1. [RF1] Add/modify/remove a network node'), nl,
+    write('2. [RF2] Add/modify/remove autonomous robots'), nl,
+    write('3. [RF3] Add/modify/remove connections between network nodes'), nl,
+    write('4. [RF4] Register and update the status of robots'), nl,
+    write('5. [RF5] Create, update, and remove delivery orders'), nl,
+    write('6. [RF6] List available robots in a given area or region'), nl,
+    write('7. [RF7] Check the current status of a specific robot'), nl,
+    write('8. [RF8] List available charging stations in a given area or near a robot'), nl,
+    write('9. [RF9] Determine whether a robot can perform a given delivery'), nl,
+    write('10. [RF10] View entire knowledge base'), nl,
     write('0. Exit'), nl,
-    write('Enter your choice: '),
+    write('Enter your choice (0-9): '),
     read(Choice),
     execute(Choice),
     Choice == 0,
@@ -193,18 +201,20 @@ menu :-
 % Main menu logic
 % -------------------------------
 
-execute(1) :- !, node_menu.
-execute(2) :- !, robot_menu.
-execute(3) :- !, connection_menu.
-execute(4) :- !, status_menu.
-execute(5) :- !, order_menu.
-execute(0) :- !, write('Exiting... Goodbye!'), nl.
+execute(1) :- !, node_menu.                             % RF1
+execute(2) :- !, robot_menu.                            % RF2
+execute(3) :- !, connection_menu.                       % RF3
+execute(4) :- !, status_menu.                           % RF4
+execute(5) :- !, order_menu.                            % RF5
+execute(6) :- !, list_available_robots.                 % RF6
+execute(7) :- !, check_robot_status.                    % RF7
+execute(8) :- !, list_charging_stations.                % RF8
+execute(9) :- !, check_robot_delivery_capability.       % RF9
+execute(10):- !, view_kb.
+execute(0) :- !, write('Exiting the underworld... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
 
-% -------------------------------
-% RF1 - Nodes
-% -------------------------------
-
+% RF1 to RF5 Menus
 node_menu :-
     nl,
     write('--- Network Nodes ---'), nl,
@@ -218,10 +228,6 @@ handle_node(1) :- !, add_node.
 handle_node(2) :- !, modify_node.
 handle_node(3) :- !, remove_node.
 handle_node(_) :- write('Invalid option.'), nl.
-
-% -------------------------------
-% RF2 - Robots
-% -------------------------------
 
 robot_menu :-
     nl,
@@ -237,10 +243,6 @@ handle_robot(2) :- !, modify_robot.
 handle_robot(3) :- !, remove_robot.
 handle_robot(_) :- write('Invalid option.'), nl.
 
-% -------------------------------
-% RF3 - Connections
-% -------------------------------
-
 connection_menu :-
     nl,
     write('--- Connections ---'), nl,
@@ -255,10 +257,6 @@ handle_connection(2) :- !, modify_connection.
 handle_connection(3) :- !, remove_connection.
 handle_connection(_) :- write('Invalid option.'), nl.
 
-% -------------------------------
-% RF4 - Robot Status
-% -------------------------------
-
 status_menu :-
     nl,
     write('--- Robot Status ---'), nl,
@@ -270,10 +268,6 @@ status_menu :-
 handle_status(1) :- !, register_status.
 handle_status(2) :- !, update_status.
 handle_status(_) :- write('Invalid option.'), nl.
-
-% -------------------------------
-% RF5 - Delivery Orders
-% -------------------------------
 
 order_menu :-
     nl,
@@ -290,24 +284,198 @@ handle_order(3) :- !, remove_order.
 handle_order(_) :- write('Invalid option.'), nl.
 
 % -------------------------------
-% Dummy predicates (placeholders)
+% Dummy predicates (Placeholders para desenvolvimento)
 % -------------------------------
 
-add_node :- write('add_node called'), nl.
-modify_node :- write('modify_node called'), nl.
-remove_node :- write('remove_node called'), nl.
+% RF1 a RF5
+% --- RF1: Nodes ---
+add_node :-
+    write('Enter Node ID: '), read(ID),
+    write('Enter Address (in quotes, e.g., \'New Place\'): '), read(Address),
+    assertz(node(ID, Address)),
+    write('Node added successfully!'), nl.
 
-add_robot :- write('add_robot called'), nl.
-modify_robot :- write('modify_robot called'), nl.
-remove_robot :- write('remove_robot called'), nl.
+modify_node :-
+    write('Enter Node ID to modify: '), read(ID),
+    retract(node(ID, _)),
+    write('Enter new Address (in quotes): '), read(Address),
+    assertz(node(ID, Address)),
+    write('Node modified successfully!'), nl.
 
-add_connection :- write('add_connection called'), nl.
-modify_connection :- write('modify_connection called'), nl.
-remove_connection :- write('remove_connection called'), nl.
+remove_node :-
+    write('Enter Node ID to remove: '), read(ID),
+    retract(node(ID, _)),
+    write('Node removed successfully!'), nl.
 
-register_status :- write('register_status called'), nl.
-update_status :- write('update_status called'), nl.
+% --- RF2: Robots ---
+add_robot :-
+    write('Enter Robot ID: '), read(ID),
+    write('Enter Type (e.g., \'Drone\'): '), read(Type),
+    write('Enter Volume Capacity: '), read(Vol),
+    write('Enter Weight Capacity: '), read(Weight),
+    write('Enter Velocity: '), read(Vel),
+    write('Enter Max Battery: '), read(Bat),
+    write('Enter Consumption: '), read(Cons),
+    assertz(robot(ID, Type, Vol, Weight, Vel, Bat, Cons)),
+    write('Robot added successfully!'), nl.
 
-create_order :- write('create_order called'), nl.
-update_order :- write('update_order called'), nl.
-remove_order :- write('remove_order called'), nl.
+modify_robot :-
+    write('Enter Robot ID to modify: '), read(ID),
+    retract(robot(ID, _, _, _, _, _, _)),
+    write('Enter Type: '), read(Type),
+    write('Enter Volume Capacity: '), read(Vol),
+    write('Enter Weight Capacity: '), read(Weight),
+    write('Enter Velocity: '), read(Vel),
+    write('Enter Max Battery: '), read(Bat),
+    write('Enter Consumption: '), read(Cons),
+    assertz(robot(ID, Type, Vol, Weight, Vel, Bat, Cons)),
+    write('Robot modified successfully!'), nl.
+
+remove_robot :-
+    write('Enter Robot ID to remove: '), read(ID),
+    retract(robot(ID, _, _, _, _, _, _)),
+    write('Robot removed successfully!'), nl.
+
+% --- RF3: Connections ---
+add_connection :-
+    write('Enter Node A ID: '), read(A),
+    write('Enter Node B ID: '), read(B),
+    write('Enter Distance: '), read(Dist),
+    write('Enter Type (in quotes, e.g., \'Mixed\'): '), read(Type),
+    assertz(link(A, B, Dist, Type)),
+    write('Connection added successfully!'), nl.
+
+modify_connection :-
+    write('Enter Node A ID: '), read(A),
+    write('Enter Node B ID: '), read(B),
+    retract(link(A, B, _, _)),
+    write('Enter new Distance: '), read(Dist),
+    write('Enter new Type (in quotes): '), read(Type),
+    assertz(link(A, B, Dist, Type)),
+    write('Connection modified successfully!'), nl.
+
+remove_connection :-
+    write('Enter Node A ID: '), read(A),
+    write('Enter Node B ID: '), read(B),
+    retract(link(A, B, _, _)),
+    write('Connection removed successfully!'), nl.
+
+
+% --- RF4: Robot Status ---
+register_status :-
+    write('Enter Robot ID: '), read(ID),
+    write('Enter Location Node ID: '), read(Loc),
+    write('Enter Battery Level (%): '), read(Bat),
+    write('Enter Mission Status (idle, transporting, etc.): '), read(Status),
+    write('Enter Load ID (or none): '), read(Load),
+    assertz(op_status(ID, Loc, Bat, Status, Load)),
+    write('Status registered successfully!'), nl.
+
+update_status :-
+    write('Enter Robot ID to update: '), read(ID),
+    retract(op_status(ID, _, _, _, _)),
+    write('Enter new Location Node ID: '), read(Loc),
+    write('Enter new Battery Level (%): '), read(Bat),
+    write('Enter new Mission Status: '), read(Status),
+    write('Enter new Load ID: '), read(Load),
+    assertz(op_status(ID, Loc, Bat, Status, Load)),
+    write('Status updated successfully!'), nl.
+
+% --- RF5: Delivery Orders ---
+create_order :-
+    write('Enter Order ID: '), read(ID),
+    write('Enter Destination Node ID: '), read(Dest),
+    write('Enter Urgency (1-3): '), read(Urg),
+    write('Enter List of Products (e.g., [1,2,3]): '), read(List),
+    write('Enter Status (in quotes, e.g., \'Pending\'): '), read(Status),
+    assertz(order(ID, Dest, Urg, List, Status)),
+    write('Order created successfully!'), nl.
+
+update_order :-
+    write('Enter Order ID to update: '), read(ID),
+    retract(order(ID, _, _, _, _)),
+    write('Enter new Destination Node ID: '), read(Dest),
+    write('Enter new Urgency: '), read(Urg),
+    write('Enter new List of Products: '), read(List),
+    write('Enter new Status (in quotes): '), read(Status),
+    assertz(order(ID, Dest, Urg, List, Status)),
+    write('Order updated successfully!'), nl.
+
+remove_order :-
+    write('Enter Order ID to remove: '), read(ID),
+    retract(order(ID, _, _, _, _)),
+    write('Order removed successfully!'), nl.
+
+% --- RF6: List available robots in a given area ---
+list_available_robots :-
+    write('Enter Node ID to search for idle robots: '), read(NodeID),
+    findall(RobotID, op_status(RobotID, NodeID, _, idle, _), Robots),
+    (Robots \= [] ->
+        format('Available (idle) robots at Node ~w: ~w~n', [NodeID, Robots])
+    ;
+        format('No available robots at Node ~w right now.~n', [NodeID])
+    ).
+
+% --- RF7: Check current status of a specific robot ---
+check_robot_status :-
+    write('Enter Robot ID to check: '), read(ID),
+    (op_status(ID, Loc, Bat, Status, Load) ->
+        format('>>> Robot ~w Status <<<~n', [ID]),
+        format('Location: Node ~w~n', [Loc]),
+        format('Battery: ~w%~n', [Bat]),
+        format('Mission: ~w~n', [Status]),
+        format('Load ID: ~w~n', [Load])
+    ;
+        write('Error: Robot not found in operations table.'), nl
+    ).
+
+% --- RF8: List available charging stations ---
+list_charging_stations :-
+    write('--- Available Hubs ---'), nl,
+    forall(hub(ID, Name, 'Available', Speed), format('Hub ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])),
+    write('--- Available Charge Stations ---'), nl,
+    forall(charge_station(ID, Name, 'Available', Speed), format('Station ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])).
+
+% --- RF9: Determine delivery capability (Capacity Check) ---
+check_robot_delivery_capability :-
+    write('Enter Robot ID: '), read(RobotID),
+    write('Enter Order ID (to check Load): '), read(OrderID),
+    
+    % Fetch Robot data
+    (robot(RobotID, _, R_Vol, R_Weight, _, R_Bat, _) -> true ; write('Robot not found!'), nl, fail),
+    
+    % Fetch Load data related to Order
+    (load(_, OrderID, L_Vol, L_Weight) -> true ; write('Load for this order not found!'), nl, fail),
+    
+    % Fetch Robot Battery from Status
+    (op_status(RobotID, _, CurrentBat, _, _) -> true ; CurrentBat = R_Bat), 
+    
+    format('Checking if Robot ~w can carry Order ~w...~n', [RobotID, OrderID]),
+    format('Robot Capacity -> Volume: ~w | Weight: ~w~n', [R_Vol, R_Weight]),
+    format('Load Required  -> Volume: ~w | Weight: ~w~n', [L_Vol, L_Weight]),
+    
+    (L_Vol =< R_Vol, L_Weight =< R_Weight ->
+        write('RESULT: [YES] Robot has enough physical capacity for this delivery.'), nl,
+        (CurrentBat > 20 -> 
+            write('STATUS: Battery is above critical level.')
+        ; 
+            write('WARNING: Battery is low, might need charge!')
+        ), nl
+    ;
+        write('RESULT: [NO] Robot CANNOT carry this order (Exceeds capacity).'), nl
+    ).
+
+% DEV TOOL: VIEW ENTIRE KNOWLEDGE BASE
+view_kb :-
+    nl, write('================ KNOWLEDGE BASE STATE =================='), nl,
+    write('--- NODES ---'), nl,
+    forall(node(ID, Addr), format('node(~w, ~q).~n', [ID, Addr])),
+    write('--- ROBOTS ---'), nl,
+    forall(robot(ID, Type, V, W, Vel, Bat, Cons), format('robot(~w, ~q, ~w, ~w, ~w, ~w, ~w).~n', [ID, Type, V, W, Vel, Bat, Cons])),
+    write('--- CONNECTIONS ---'), nl,
+    forall(link(A, B, Dist, Type), format('link(~w, ~w, ~w, ~q).~n', [A, B, Dist, Type])),
+    write('--- STATUS ---'), nl,
+    forall(op_status(ID, Loc, Bat, Status, Load), format('op_status(~w, ~w, ~w, ~w, ~w).~n', [ID, Loc, Bat, Status, Load])),
+    write('--- ORDERS ---'), nl,
+    forall(order(ID, Dest, Urg, Prod, Status), format('order(~w, ~w, ~w, ~w, ~q).~n', [ID, Dest, Urg, Prod, Status])),
+    write('========================================================'), nl.
