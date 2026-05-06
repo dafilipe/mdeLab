@@ -1,25 +1,81 @@
 % Knowledge base template
 
-% robots(ID, Type, Volume_cap, Weight_cap, Vel, Max_bat, Cons)              
-% op_status(Robot_ID, Location, Batt_Level, Mission_status, Load_ID)        
+% robot(ID, Type, Volume_cap, Weight_cap, Vel, Max_bat, Cons)               FEITO
+% op_status(Robot_ID, Location, Batt_Level, Mission_status, Load_ID)        FEITO
 % supplier(Node_ID, Name, List_of_Products)                                 FEITO
 % hub(Node_ID, Name, Status, Charge_speed)                                  FEITO
 % charge_station(Node_ID, Name, Status, Charge_speed)                       FEITO
 % customer(Node_ID, Name)                                                   FEITO
 % load(Load_ID, Order_ID, Volume, Weight)                                   
 % order(Order_ID, Destination_node, Urgency, List_of_Products, Status)      
-% product(Product_ID, Name, Volume, Weight)                                 FEITO
+% product(Product_ID, Name, Volume L, Weight kg)                         FEITO
 % node(Node_ID, Address)                                                    FEITO
 % link(NodeID_A, NodeID_B, Dist, Tipo).                                     FEITO
 
 % DATA LOADING
-% product(Product_ID, Name, Volume, Weight)
-product(1, 'Molly', 1, 1).
-product(2, 'Cocaine', 1, 1).
-product(3, 'Weed', 1, 1).
-product(4, 'LSD', 1, 1).
-product(5, 'Heroin', 1, 1).
-product(6, 'Shrooms', 1, 1).
+
+% load(Load_ID, Order_ID, Total_Volume_L, Total_Weight_kg)
+load(1, 1, 10.0, 60.0).
+load(2, 2, 5.0, 2.5).
+load(3, 3, 7.5, 25.0).
+load(4, 4, 30.0, 200.0).
+load(5, 5, 6.0, 20.0).
+load(6, 6, 27.5, 175.0).
+
+% order(Order_ID, Destination_node, Urgency, List_of_Products, Status)
+order(1, 4, 2, [1,1,2,2], 'In_Transit').           % Vol: 10L | Peso: 60kg
+order(2, 1, 3, [4,4,4,4,4], 'In_Transit').         % Vol: 5L  | Peso: 2.5kg
+order(3, 11, 1, [3,3,3,3,3], 'In_Transit').        % Vol: 7.5L| Peso: 25kg
+order(4, 14, 1, [2,2,2,2,2,2,2,2,2,2], 'In_Transit'). % Vol: 30L | Peso: 200kg
+order(5, 12, 1, [3,3,3,3], 'In_Transit').          % Vol: 6L  | Peso: 20kg
+order(6, 16, 2, [5,5,5,5,5,2,2,2,2,2], 'In_Transit'). % Vol: 27.5L| Peso: 175kg
+order(7, 18, 3, [1,4], 'Pending').
+order(8, 5, 1, [2,2,2,2,2], 'Pending').
+order(9, 9, 2, [6,6,6], 'Pending').
+
+% robot(ID, Type, Volume_cap, Weight_cap, Vel, Max_bat, Cons)              
+robot(1, 'Drone', 15, 25, 50, 80, 0.4).
+robot(2, 'Drone', 25, 70, 40, 100, 0.6).        
+robot(3, 'Drone', 25, 35, 40, 100, 0.6).
+robot(4, 'Drone', 15, 20, 50, 80, 0.4).
+robot(5, 'Drone', 30, 20, 40, 100, 0.6).
+robot(6, 'Ground', 90, 100, 25, 300, 1.5).
+robot(7, 'Ground', 70, 80, 25, 300, 1.5).
+robot(8, 'Ground', 100, 250, 25, 300, 1.5).     
+robot(9, 'Ground', 150, 150, 20, 300, 2.0).
+robot(10, 'Ground', 110, 130, 20, 300, 2.0).
+robot(11, 'Ground_Auto', 190, 150, 30, 250, 5.0).
+robot(12, 'Ground_Auto', 170, 145, 30, 250, 5.0).
+robot(13, 'Ground_Auto', 160, 200, 30, 250, 5.0). 
+robot(14, 'Ground_Auto', 180, 120, 30, 250, 6.0).
+robot(15, 'Ground_Auto', 200, 110, 30, 250, 6.0).
+
+% op_status(Robot_ID, Location, Batt_Level, Mission_status, Load_ID)
+op_status(1, 10, 100, idle, none).           
+op_status(2, 4, 45, transporting, 1).   
+op_status(3, 16, 20, charging, none).        
+op_status(4, 1, 85, transporting, 2).   
+op_status(5, 18, 5, fudido, none).         
+
+op_status(6, 10, 95, idle, none).            
+op_status(7, 6, 60, transporting, 3).   
+op_status(8, 11, 40, paused, 4).        
+op_status(9, 15, 75, transporting, 5).   
+op_status(10, 10, 100, idle, none).       
+   
+op_status(11, 13, 15, charging, none).       
+op_status(12, 10, 100, idle, none).          
+op_status(13, 7, 50, transporting, 6).  
+op_status(14, 17, 0, fudido, none).          
+op_status(15, 12, 80, idle, none).     
+
+% product(Product_ID, Name, Volume_cm3, Weight_kg)
+product(1, 'Molly', 2, 10).
+product(2, 'Cocaine', 3, 20).
+product(3, 'Weed', 1.5, 5).
+product(4, 'LSD', 1, 0.5).
+product(5, 'Heroin', 2.5, 15).
+product(6, 'Shrooms', 2, 4).
 
 % supplier(Node_ID, Name, List_of_Products)
 supplier(1, 'Supplier A', [1, 2]).
@@ -109,7 +165,7 @@ link(17,18,25,'Ground').
 
 
 
-g
+
 % -------------------------------
 % Entry point
 % -------------------------------
