@@ -157,9 +157,11 @@ link(17,18,25,'Ground').
 
 :- discontiguous execute/1.
 
-
-
-
+% -------------------------------
+% Distance Rules
+% -------------------------------
+distance(X,Y,D,_) :- link(X,Y,D,_).
+distance(X,Y,D,_) :- link(X,Z,D1,_), link(Z,Y, D2,_), D is D1 + D2.
 
 % -------------------------------
 % Entry point
@@ -176,7 +178,7 @@ menu :-
     write('5. [RF5] Create, update, and remove delivery orders'), nl,
     write('6. [RF6] List available robots in a given area or region'), nl,
     write('7. [RF7] Check the current status of a specific robot'), nl,
-    write('8. [RF8] List available charging stations in a given area or near a robot'), nl,
+    write('8. [RF8] List available charging stations and hubs in a given area or near a robot'), nl,    
     write('9. [RF9] Determine whether a robot can perform a given delivery'), nl,
     write('10. [DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
     write('Enter your choice (0-9): '),
@@ -196,7 +198,7 @@ execute(4) :- !, status_menu.                           % RF4
 execute(5) :- !, order_menu.                            % RF5
 execute(6) :- !, list_available_robots.                 % RF6
 execute(7) :- !, check_robot_status.                    % RF7
-execute(8) :- !, list_charging_stations.                % RF8
+execute(8) :- !, listCS_menu.                           % RF8
 execute(9) :- !, check_robot_delivery_capability.       % RF9
 execute(10):- !, view_kb.
 execute(0) :- !, write('Exiting the underworld... Goodbye!'), nl.
@@ -270,6 +272,20 @@ handle_order(1) :- !, create_order.
 handle_order(2) :- !, update_order.
 handle_order(3) :- !, remove_order.
 handle_order(_) :- write('Invalid option.'), nl.
+
+% RF 8 Menu
+
+listCS_menu :-
+    nl,
+    write('--- Search Options ---'), nl,
+    write('1. Near a Node'), nl,
+    write('2. Near a Robot'), nl,
+    read(SubChoice),
+    handle_listCs(SubChoice).
+
+handle_listCs(1) :- !, list_charging_stations_node.
+handle_listCs(2) :- !, list_charging_stations_robot.
+handle_listCs(_) :- write('Invalid option.'), nl.
 
 % -------------------------------
 % Dummy predicates (Placeholders para desenvolvimento)
@@ -568,7 +584,6 @@ read_valid_urgency(Urg) :-
         fail
     ).
 
-valid_product_list([]).
 valid_product_list([P|Rest]) :-
     product(P, _, _, _),
     valid_product_list(Rest).
@@ -661,8 +676,21 @@ check_robot_status :-
         write('Error: Robot not found in operations table.'), nl
     ).
 
-% --- RF8: List available charging stations ---
-list_charging_stations :-
+% ESTAMOS AQUI
+
+
+% --- RF8: List available charging stations in given area or near a robot---
+list_charging_stations_robot :-
+    write('Enter Robot ID: '), read(RobotID),
+    write('Enter search radious(m): '), read(SearchRad),
+    write('--- Available Hubs ---'), nl,
+    forall(hub(ID, Name, 'Available', Speed), format('Hub ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])),
+    write('--- Available Charge Stations ---'), nl,
+    forall(charge_station(ID, Name, 'Available', Speed), format('Station ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])).
+
+list_charging_stations_node :-
+    write('Enter Node ID: '), read(RobotID),
+    write('Enter search radious(m): '), read(SearchRad),
     write('--- Available Hubs ---'), nl,
     forall(hub(ID, Name, 'Available', Speed), format('Hub ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])),
     write('--- Available Charge Stations ---'), nl,
