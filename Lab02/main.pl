@@ -1,3 +1,5 @@
+:- ensure_loaded('http_server/http_server.pl').
+
 % Knowledge base template
 :- dynamic node/2.
 :- dynamic robot/7.
@@ -282,6 +284,192 @@ print_charge_points([]) :-
 print_charge_points([cp(ID, Name, Kind, Speed, Distance) | Rest]) :-
     format('~w ~w: ~w | Speed: ~w | Distance: ~w~n', [Kind, ID, Name, Speed, Distance]),
     print_charge_points(Rest).
+
+
+% -------------------------------
+% RF9 helper rules: supplier-aware order planning
+% -------------------------------
+% RF9 now plans the real delivery flow:
+%   1) the robot starts from its effective location,
+%   2) it visits the supplier nodes required by the products in the order,
+%   3) it then goes to the customer/destination node.
+%
+% If there is a load/4 fact for the order, that is used as the official
+% volume/weight. If there is no load/4 fact, the values are calculated from
+% the order product list so pending orders without a pre-created load can still
+% be evaluated.
+
+order_load_requirements(OrderID, Volume, Weight) :-
+    load(_, OrderID, Volume, Weight),
+    !.
+order_load_requirements(OrderID, Volume, Weight) :-
+    order(OrderID, _, _, ProductList, _),
+    order_products_totals(ProductList, Volume, Weight).
+
+order_products_totals([], 0, 0).
+order_products_totals([ProductID | Rest], TotalVolume, TotalWeight) :-
+    product(ProductID, _, ProductVolume, ProductWeight),
+    order_products_totals(Rest, RestVolume, RestWeight),
+    TotalVolume is ProductVolume + RestVolume,
+    TotalWeight is ProductWeight + RestWeight.
+
+unique_order_products(OrderID, UniqueProducts) :-
+    order(OrderID, _, _, ProductList, _),
+    sort(ProductList, UniqueProducts).
+
+product_has_supplier(ProductID) :-
+    supplier(_, _, SupplierProducts),
+    member(ProductID, SupplierProducts),
+    !.
+
+order_products_missing_suppliers(OrderID, MissingProducts) :-
+    unique_order_products(OrderID, UniqueProducts),
+    findall(ProductID,
+        ( member(ProductID, UniqueProducts),
+          \+ product_has_supplier(ProductID)
+        ),
+        MissingProducts).
+
+product_supplier(ProductID, SupplierNodeID) :-
+    supplier(SupplierNodeID, _, SupplierProducts),
+    member(ProductID, SupplierProducts).
+
+supplier_assignment_for_products([], []).
+supplier_assignment_for_products([ProductID | RestProducts], [SupplierNodeID | RestSuppliers]) :-
+    product_supplier(ProductID, SupplierNodeID),
+    supplier_assignment_for_products(RestProducts, RestSuppliers).
+
+% One possible minimal set of supplier nodes that can provide all unique
+% products in an order. If a product is sold by more than one supplier, Prolog
+% explores all valid assignments and later chooses the shortest route.
+order_supplier_nodes_option(OrderID, SupplierNodes) :-
+    unique_order_products(OrderID, UniqueProducts),
+    order_products_missing_suppliers(OrderID, []),
+    supplier_assignment_for_products(UniqueProducts, AssignedSupplierNodes),
+    sort(AssignedSupplierNodes, SupplierNodes).
+
+build_order_route_for_visit_order(RobotID, Start, [], Destination, Path, Distance) :-
+    shortest_path_for_robot(RobotID, Start, Destination, p(Path, Distance)).
+build_order_route_for_visit_order(RobotID, Start, [SupplierNode | RestSuppliers], Destination, FullPath, TotalDistance) :-
+    shortest_path_for_robot(RobotID, Start, SupplierNode, p(PathToSupplier, DistanceToSupplier)),
+    build_order_route_for_visit_order(RobotID, SupplierNode, RestSuppliers, Destination, RemainingPath, RemainingDistance),
+    append(PathToSupplier, RemainingPath, FullPath),
+    TotalDistance is DistanceToSupplier + RemainingDistance.
+
+order_route_candidate(RobotID, Start, OrderID, supplier_route(SupplierNodes, VisitOrder, FullPath, TotalDistance)) :-
+    order(OrderID, Destination, _, _, _),
+    order_supplier_nodes_option(OrderID, SupplierNodes),
+    permutation(SupplierNodes, VisitOrder),
+    build_order_route_for_visit_order(RobotID, Start, VisitOrder, Destination, FullPath, TotalDistance).
+
+best_order_route_via_suppliers(RobotID, Start, OrderID, BestPath, BestDistance, BestSupplierNodes, BestVisitOrder) :-
+    findall(Route,
+        order_route_candidate(RobotID, Start, OrderID, Route),
+        Routes),
+    shortest_supplier_route(Routes, supplier_route(BestSupplierNodes, BestVisitOrder, BestPath, BestDistance)).
+
+shortest_supplier_route([Route], Route).
+shortest_supplier_route(
+    [supplier_route(Suppliers1, Visit1, Path1, Distance1), supplier_route(_, _, _, Distance2) | Rest],
+    Best
+) :-
+    Distance1 =< Distance2,
+    shortest_supplier_route([supplier_route(Suppliers1, Visit1, Path1, Distance1) | Rest], Best).
+shortest_supplier_route(
+    [supplier_route(_, _, _, Distance1), supplier_route(Suppliers2, Visit2, Path2, Distance2) | Rest],
+    Best
+) :-
+    Distance1 > Distance2,
+    shortest_supplier_route([supplier_route(Suppliers2, Visit2, Path2, Distance2) | Rest], Best).
+
+remaining_battery_after_distance(RobotID, AvailableBefore, Distance, Needed, AvailableAfter) :-
+    battery_needed_for_distance(RobotID, Distance, Needed),
+    AvailableAfter is AvailableBefore - Needed.
+
+print_supplier_visit_details([]).
+print_supplier_visit_details([SupplierNode | Rest]) :-
+    ( supplier(SupplierNode, SupplierName, SupplierProducts) ->
+        format('  Supplier Node ~w (~w) | Products: ~w~n', [SupplierNode, SupplierName, SupplierProducts])
+    ;
+        format('  Supplier Node ~w~n', [SupplierNode])
+    ),
+    print_supplier_visit_details(Rest).
+
+print_order_route_result(Path, SupplierNodes, VisitOrder, Distance, Available, Needed, Remaining) :-
+    path_link_types(Path, LinkTypes),
+    format('Required supplier nodes: ~w~n', [SupplierNodes]),
+    write('Supplier details:'), nl,
+    print_supplier_visit_details(SupplierNodes),
+    format('Chosen supplier visit order: ~w~n', [VisitOrder]),
+    format('ROUTE: [OK] Supplier-aware compatible path found: ~w~n', [Path]),
+    format('Route link types: ~w~n', [LinkTypes]),
+    format('Total distance: ~w~n', [Distance]),
+    format('Battery available: ~2f | Battery needed: ~2f | Battery after route: ~2f~n', [Available, Needed, Remaining]).
+
+check_new_order_from_location(RobotID, OrderID, StartLoc, AvailableBattery) :-
+    order_products_missing_suppliers(OrderID, MissingProducts),
+    ( MissingProducts \= [] ->
+        format('RESULT: [NO] Order has products without any registered supplier: ~w~n', [MissingProducts])
+    ; best_order_route_via_suppliers(RobotID, StartLoc, OrderID, Path, Distance, SupplierNodes, VisitOrder) ->
+        remaining_battery_after_distance(RobotID, AvailableBattery, Distance, Needed, Remaining),
+        print_order_route_result(Path, SupplierNodes, VisitOrder, Distance, AvailableBattery, Needed, Remaining),
+        ( Needed =< AvailableBattery ->
+            write('RESULT: [YES] Robot can collect the products from suppliers and deliver this order.'), nl
+        ;
+            write('RESULT: [NO] Robot has a compatible supplier route, but not enough battery.'), nl
+        )
+    ;
+        write('RESULT: [NO] No compatible route exists through the required suppliers for this robot type.'), nl
+    ).
+
+check_after_current_order_then_new(RobotID, RequestedOrderID, CurrentLoc, AvailableBattery, CurrentLoadID) :-
+    ( load(CurrentLoadID, CurrentOrderID, _, _) ->
+        true
+    ;
+        write('RESULT: [NO] Robot is transporting, but its current Load ID does not match any load/order.'), nl,
+        fail
+    ),
+    ( CurrentOrderID == RequestedOrderID ->
+        write('RESULT: [NO] Robot is already executing this requested order.'), nl
+    ; order(CurrentOrderID, CurrentDestination, _, _, _) ->
+        format('Robot is currently transporting Load ~w for Order ~w.~n', [CurrentLoadID, CurrentOrderID]),
+        format('First checking completion of current order to destination Node ~w...~n', [CurrentDestination]),
+        ( shortest_path_for_robot(RobotID, CurrentLoc, CurrentDestination, p(CurrentPath, CurrentDistance)) ->
+            remaining_battery_after_distance(RobotID, AvailableBattery, CurrentDistance, CurrentNeeded, BatteryAfterCurrent),
+            path_link_types(CurrentPath, CurrentLinkTypes),
+            format('Current order path: ~w~n', [CurrentPath]),
+            format('Current order link types: ~w~n', [CurrentLinkTypes]),
+            format('Current order distance: ~w~n', [CurrentDistance]),
+            format('Battery before current completion: ~2f | Needed: ~2f | After completion: ~2f~n', [AvailableBattery, CurrentNeeded, BatteryAfterCurrent]),
+            ( CurrentNeeded =< AvailableBattery ->
+                write('CURRENT ORDER: [OK] Robot can finish its current order first.'), nl,
+                format('Now checking requested Order ~w from Node ~w with remaining battery...~n', [RequestedOrderID, CurrentDestination]),
+                check_new_order_from_location(RobotID, RequestedOrderID, CurrentDestination, BatteryAfterCurrent)
+            ;
+                write('RESULT: [NO] Robot cannot be assigned because it lacks battery to finish the current order first.'), nl
+            )
+        ;
+            write('RESULT: [NO] Robot cannot be assigned because no compatible route exists to finish its current order.'), nl
+        )
+    ;
+        write('RESULT: [NO] Robot current order was not found.'), nl
+    ).
+
+check_robot_assignment_status(RobotID, OrderID, CurrentLoc, CurrentBatPercent, MissionStatus, LoadID) :-
+    battery_available_units(RobotID, AvailableBattery),
+    format('Current location: Node ~w | Battery: ~w%% (~2f units) | Status: ~w | Load: ~w~n',
+           [CurrentLoc, CurrentBatPercent, AvailableBattery, MissionStatus, LoadID]),
+    ( MissionStatus == idle, LoadID == none ->
+        write('AVAILABILITY: [OK] Robot is idle and can be evaluated for this order now.'), nl,
+        check_new_order_from_location(RobotID, OrderID, CurrentLoc, AvailableBattery)
+    ; MissionStatus == idle ->
+        write('RESULT: [NO] Robot is idle but still has a Load ID assigned; operational status is inconsistent.'), nl
+    ; MissionStatus == transporting ->
+        write('AVAILABILITY: [WAIT] Robot is transporting another order; checking if it can do the requested order after finishing the current one.'), nl,
+        check_after_current_order_then_new(RobotID, OrderID, CurrentLoc, AvailableBattery, LoadID)
+    ;
+        format('RESULT: [NO] Robot cannot be assigned while its status is ~w.~n', [MissionStatus])
+    ).
 
 
 
@@ -858,34 +1046,43 @@ list_charging_stations_node :-
     format('--- Available charging points from Node ~w ---~n', [NodeID]),
     print_charge_points(Points).
 
-% --- RF9: Determine delivery capability (capacity + route + battery check) ---
+% --- RF9: Determine delivery capability (capacity + supplier route + battery + status check) ---
 check_robot_delivery_capability :-
     write('Enter Robot ID: '), read(RobotID),
-    write('Enter Order ID (to check Load): '), read(OrderID),
+    write('Enter Order ID: '), read(OrderID),
 
     % Fetch Robot data
     ( robot(RobotID, RobotType, R_Vol, R_Weight, _, _, _) -> true ; write('Robot not found!'), nl, fail ),
 
-    % Fetch Order and Load data
-    ( order(OrderID, DestNode, _, _, _) -> true ; write('Order not found!'), nl, fail ),
-    ( load(_, OrderID, L_Vol, L_Weight) -> true ; write('Load for this order not found!'), nl, fail ),
+    % Fetch Order and load/product data
+    ( order(OrderID, DestNode, _, ProductList, OrderStatus) -> true ; write('Order not found!'), nl, fail ),
+    ( order_load_requirements(OrderID, L_Vol, L_Weight) -> true ; write('Could not calculate load requirements for this order!'), nl, fail ),
 
     % Fetch Robot operational data
-    ( op_status(RobotID, CurrentLoc, CurrentBatPercent, _, _) ->
+    ( op_status(RobotID, CurrentLoc, CurrentBatPercent, MissionStatus, LoadID) ->
         true
     ;
         write('Robot has no operational status/location registered!'), nl,
         fail
     ),
 
+    % Fetch Order data and reject orders that are already being executed.
+    ( order(OrderID, DestNode, _, ProductList, OrderStatus) -> true ; write('Order not found!'), nl, fail ),
+    ( OrderStatus == 'In_Transit' ->
+        format('RESULT: [NO] Order ~w is already In_Transit and cannot be assigned again.~n', [OrderID]),
+        fail
+    ;
+        true
+    ),
+
     format('Checking if Robot ~w (~w) can perform Order ~w...~n', [RobotID, RobotType, OrderID]),
-    format('Current location: Node ~w | Destination: Node ~w | Battery: ~w%%~n', [CurrentLoc, DestNode, CurrentBatPercent]),
+    format('Order destination: Node ~w | Order status: ~w | Products: ~w~n', [DestNode, OrderStatus, ProductList]),
     format('Robot Capacity -> Volume: ~w | Weight: ~w~n', [R_Vol, R_Weight]),
-    format('Load Required  -> Volume: ~w | Weight: ~w~n', [L_Vol, L_Weight]),
+    format('Order Required -> Volume: ~w | Weight: ~w~n', [L_Vol, L_Weight]),
 
     ( L_Vol =< R_Vol, L_Weight =< R_Weight ->
-        write('CAPACITY: [OK] Robot can physically carry this load.'), nl,
-        check_robot_route_and_battery(RobotID, CurrentLoc, DestNode)
+        write('CAPACITY: [OK] Robot can physically carry this order load.'), nl,
+        check_robot_assignment_status(RobotID, OrderID, CurrentLoc, CurrentBatPercent, MissionStatus, LoadID)
     ;
         write('RESULT: [NO] Robot CANNOT carry this order because the load exceeds capacity.'), nl
     ).
@@ -997,16 +1194,15 @@ best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy) :
     best_robot_from_list(Options, robot_option(BestRobotID, BestPath, BestDistance, BestEnergy)).
 
 robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy) :-
-    order(OrderID, DestNode, _, _, _),
-    load(_, OrderID, LVol, LWeight),
+    order_load_requirements(OrderID, LVol, LWeight),
 
-    robot(RobotID, RobotType, RVol, RWeight, _, _, Consumption),
+    robot(RobotID, _, RVol, RWeight, _, _, Consumption),
     op_status(RobotID, CurrentLoc, _, idle, none),
 
     LVol =< RVol,
     LWeight =< RWeight,
 
-    shortest_path_for_robot(RobotID, CurrentLoc, DestNode, p(Path, Distance)),
+    best_order_route_via_suppliers(RobotID, CurrentLoc, OrderID, Path, Distance, _, _),
     Energy is Distance * Consumption,
 
     robot_has_battery_for_distance(RobotID, Distance, _, _).
@@ -1194,3 +1390,8 @@ handle_view_kb(0) :- !,
 
 handle_view_kb(_) :- 
     write('Invalid option.'), nl.
+
+
+start_system :-
+    start_server(8001),
+    menu.
