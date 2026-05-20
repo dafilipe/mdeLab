@@ -311,7 +311,9 @@ menu :-
     write('9. [RF9] Determine whether a robot can perform a given delivery'), nl,
     write('10.[RF10] Determine the shortest route between two nodes'), nl,
     write('11.[RF11] Determine the route with the lowest energy consumption'), nl, 
-    write('12. [RF12] Determine routes that include intermediate distribution points'), nl,
+    write('12.[RF12] Determine routes that include intermediate distribution points'), nl,
+    write('13.[RF13] Determine routes that include charging stations'), nl,
+    write('14.[RF14] Select the best robot for a delivery'), nl,
     write('22.[DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
     write('Enter your choice (0-9): '),
     read(Choice),
@@ -335,6 +337,8 @@ execute(9) :- !, check_robot_delivery_capability.       % RF9
 execute(10) :- !, shortest_route_menu.                  % RF10
 execute(11) :- !, lowest_energy_route_menu.             % RF11
 execute(12) :- !, route_with_hub_menu.                  % RF12
+execute(13) :- !, route_with_charging_menu.             % RF13
+execute(14) :- !, best_robot_menu.                      % RF14
 execute(22):- !, view_kb.
 execute(0) :- !, write('Exiting system... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
@@ -946,6 +950,119 @@ route_with_hub_menu :-
     ;
         write('ERROR: No valid route through an available hub was found.'), nl
     ).
+
+% --- RF13: Determine routes that include charging stations ---
+route_with_charging_menu :-
+    write('Enter Robot ID: '), read(RobotID),
+    write('Enter start node ID: '), read(Start),
+    write('Enter end node ID: '), read(End),
+
+    ( \+ robot(RobotID, _, _, _, _, _, _) ->
+        write('ERROR: Robot does not exist.'), nl
+    ; \+ node(Start, _) ->
+        write('ERROR: Start node does not exist.'), nl
+    ; \+ node(End, _) ->
+        write('ERROR: End node does not exist.'), nl
+    ; route_with_charging(RobotID, Start, End, ChargeID, FullPath, TotalDistance, TotalEnergy) ->
+        format('Best route for Robot ~w using charging station ~w:~n', [RobotID, ChargeID]),
+        print_path(FullPath),
+        format('Total distance: ~w~n', [TotalDistance]),
+        format('Total energy needed: ~2f~n', [TotalEnergy])
+    ;
+        write('ERROR: No valid route through an available charging station was found.'), nl
+    ).
+
+
+% --- RF14: Select the best robot for a delivery ---
+best_robot_menu :-
+    write('Enter Order ID: '), read(OrderID),
+
+    ( \+ order(OrderID, _, _, _, _) ->
+        write('ERROR: Order does not exist.'), nl
+    ; best_robot_for_order(OrderID, RobotID, Path, Distance, Energy) ->
+        format('Best robot for Order ~w: Robot ~w~n', [OrderID, RobotID]),
+        print_path(Path),
+        format('Total distance: ~w~n', [Distance]),
+        format('Energy needed: ~2f~n', [Energy])
+    ;
+        write('ERROR: No available robot can perform this order.'), nl
+    ).
+
+best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy) :-
+    findall(
+        robot_option(RobotID, Path, Distance, Energy),
+        robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy),
+        Options
+    ),
+    best_robot_from_list(Options, robot_option(BestRobotID, BestPath, BestDistance, BestEnergy)).
+
+robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy) :-
+    order(OrderID, DestNode, _, _, _),
+    load(_, OrderID, LVol, LWeight),
+
+    robot(RobotID, RobotType, RVol, RWeight, _, _, Consumption),
+    op_status(RobotID, CurrentLoc, _, idle, none),
+
+    LVol =< RVol,
+    LWeight =< RWeight,
+
+    shortest_path_for_robot(RobotID, CurrentLoc, DestNode, p(Path, Distance)),
+    Energy is Distance * Consumption,
+
+    robot_has_battery_for_distance(RobotID, Distance, _, _).
+
+best_robot_from_list([Option], Option).
+
+best_robot_from_list(
+    [robot_option(Robot1, Path1, Dist1, Energy1),
+     robot_option(_, _, _, Energy2) | Rest],
+    Best
+) :-
+    Energy1 =< Energy2,
+    best_robot_from_list([robot_option(Robot1, Path1, Dist1, Energy1) | Rest], Best).
+
+best_robot_from_list(
+    [robot_option(_, _, _, Energy1),
+     robot_option(Robot2, Path2, Dist2, Energy2) | Rest],
+    Best
+) :-
+    Energy1 > Energy2,
+    best_robot_from_list([robot_option(Robot2, Path2, Dist2, Energy2) | Rest], Best).
+
+route_with_charging(RobotID, Start, End, BestChargeID, BestPath, BestDistance, BestEnergy) :-
+    robot(RobotID, RobotType, _, _, _, MaxBat, Consumption),
+    findall(
+        charge_route(ChargeID, FullPath, TotalDistance, TotalEnergy),
+        (
+            charge_station(ChargeID, _, 'Available', _),
+
+            route(Start, ChargeID, RobotType, Path1, D1),
+            route(ChargeID, End, RobotType, Path2, D2),
+
+            Energy1 is D1 * Consumption,
+            Energy2 is D2 * Consumption,
+
+            Energy1 =< MaxBat,
+            Energy2 =< MaxBat,
+
+            append(Path1, Path2, FullPath),
+            TotalDistance is D1 + D2,
+            TotalEnergy is Energy1 + Energy2
+        ),
+        Routes
+    ),
+    lowest_charge_route(Routes, charge_route(BestChargeID, BestPath, BestDistance, BestEnergy)).
+
+lowest_charge_route([Route], Route).
+
+lowest_charge_route([charge_route(C1, Path1, Dist1, Energy1), charge_route(_, _, _, Energy2) | Rest], Best) :-
+    Energy1 =< Energy2,
+    lowest_charge_route([charge_route(C1, Path1, Dist1, Energy1) | Rest], Best).
+
+lowest_charge_route([charge_route(_, _, _, Energy1), charge_route(C2, Path2, Dist2, Energy2) | Rest], Best) :-
+    Energy1 > Energy2,
+    lowest_charge_route([charge_route(C2, Path2, Dist2, Energy2) | Rest], Best).
+
 
 best_route_with_hub(Start, End, BestHub, BestPath, BestDistance) :-
     findall(
