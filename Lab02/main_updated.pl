@@ -309,6 +309,7 @@ menu :-
     write('7. [RF7] Check the current status of a specific robot'), nl,
     write('8. [RF8] List available charging stations and hubs in a given area or near a robot'), nl,    
     write('9. [RF9] Determine whether a robot can perform a given delivery'), nl,
+    write('10. [RF10] Determine the shortest route between two nodes'), nl,
     write('22. [DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
     write('Enter your choice (0-9): '),
     read(Choice),
@@ -329,6 +330,7 @@ execute(6) :- !, list_available_robots.                 % RF6
 execute(7) :- !, check_robot_status.                    % RF7
 execute(8) :- !, listCS_menu.                           % RF8
 execute(9) :- !, check_robot_delivery_capability.       % RF9
+execute(10) :- !, shortest_route_menu.              % RF10
 execute(22):- !, view_kb.
 execute(0) :- !, write('Exiting system... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
@@ -879,6 +881,29 @@ check_robot_delivery_capability :-
     ;
         write('RESULT: [NO] Robot CANNOT carry this order because the load exceeds capacity.'), nl
     ).
+
+% --- RF10: Determine the shortest route between two nodes ---
+shortest_route_menu :-
+    write('Enter start node ID: '), read(Start),
+    write('Enter end node ID: '), read(End),
+
+    ( \+ node(Start, _) ->
+        write('ERROR: Start node does not exist.'), nl
+    ; \+ node(End, _) ->
+        write('ERROR: End node does not exist.'), nl
+    ; shortest_path(Start, End, p(Path, Distance)) ->
+        format('Shortest route from Node ~w to Node ~w:~n', [Start, End]),
+        print_path(Path),
+        format('Total distance: ~w~n', [Distance])
+    ;
+        write('ERROR: No route found between these nodes.'), nl
+    ).
+
+print_path([]).
+
+print_path([link(A, B, D, Type) | Rest]) :-
+    format('~w -> ~w | Distance: ~w | Type: ~w~n', [A, B, D, Type]),
+    print_path(Rest).
 
 check_robot_route_and_battery(RobotID, CurrentLoc, DestNode) :-
     ( shortest_path_for_robot(RobotID, CurrentLoc, DestNode, p(Path, Distance)) ->

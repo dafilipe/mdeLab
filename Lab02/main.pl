@@ -53,7 +53,7 @@ op_status(1, 10, 100, idle, none).
 op_status(2, 4, 45, transporting, 1).   
 op_status(3, 16, 20, charging, none).        
 op_status(4, 1, 85, transporting, 2).   
-op_status(5, 18, 5, fudido, none).         
+op_status(5, 18, 5, damaged, none).         
 
 op_status(6, 10, 95, idle, none).            
 op_status(7, 6, 60, transporting, 3).   
@@ -64,16 +64,16 @@ op_status(10, 10, 100, idle, none).
 op_status(11, 13, 15, charging, none).       
 op_status(12, 10, 100, idle, none).          
 op_status(13, 7, 50, transporting, 6).  
-op_status(14, 17, 0, fudido, none).          
+op_status(14, 17, 0, damaged, none).          
 op_status(15, 12, 80, idle, none).     
 
 % product(Product_ID, Name, Volume_cm3, Weight_kg)
-product(1, 'Molly', 2, 10).
-product(2, 'Cocaine', 3, 20).
-product(3, 'Weed', 1.5, 5).
-product(4, 'LSD', 1, 0.5).
-product(5, 'Heroin', 2.5, 15).
-product(6, 'Shrooms', 2, 4).
+product(1, 'Package A', 2, 10).
+product(2, 'Package B', 3, 20).
+product(3, 'Package C', 1.5, 5).
+product(4, 'Package D', 1, 0.5).
+product(5, 'Package E', 2.5, 15).
+product(6, 'Package F', 2, 4).
 
 % supplier(Node_ID, Name, List_of_Products)
 supplier(1, 'Supplier A', [1, 2]).
@@ -91,7 +91,7 @@ charge_station(8, 'Charge Station C', 'Available', 20).
 
 % customer(Node_ID, Name)
 customer(9, 'Customer A').
-customer(10, 'King pin').
+customer(10, 'Main Customer').
 customer(11, 'Customer C').
 customer(12, 'Customer D').
 customer(13, 'Customer E').
@@ -157,44 +157,139 @@ link(17,18,25,'Ground').
 
 :- discontiguous execute/1.
 
+
+
+
+
+
+
+
 % -------------------------------
-% Distance Rules
+% Distance and routing rules
 % -------------------------------
-distance(X,Y,D,_) :- link(X,Y,D,_).
-distance(X,Y,D,_) :- link(X,Z,D1,_), link(Z,Y, D2,_), D is D1 + D2.
+% The network is treated as an undirected graph: a link can be travelled
+% in either direction. Every route below is recursive and cycle-safe.
+%
+% Link compatibility rules:
+%   - Drone robots can use Aerial and Mixed links.
+%   - Ground and Ground_Auto robots can use Ground and Mixed links.
+%   - any means ignore robot type and allow every link.
 
-mindist(X,Y,D) :- findall(Di, distance(X,Y,Di,_), LDi), min(LDi, D).
+valid_link_for_robot(RobotType, _) :- var(RobotType), !.
+valid_link_for_robot(any, _).
+valid_link_for_robot('Drone', 'Aerial').
+valid_link_for_robot('Drone', 'Mixed').
+valid_link_for_robot('Ground', 'Ground').
+valid_link_for_robot('Ground', 'Mixed').
+valid_link_for_robot('Ground_Auto', 'Ground').
+valid_link_for_robot('Ground_Auto', 'Mixed').
 
-min([X],X).
-min([X|R], X) :- min(R,M), X =< M.
-min([X|R],M) :- min(R,M), X > M.
+% biarc(Start, End, Distance, LinkType)
+% Allows movement in both directions even though links are stored once.
+biarc(X, Y, D, T) :- link(X, Y, D, T).
+biarc(X, Y, D, T) :- link(Y, X, D, T).
+
+% route(Start, End, RobotTypeOrAny, Path, TotalDistance)
+% Fully recursive path finder. It remembers visited nodes to avoid loops.
+route(X, Y, RobotType, Path, Distance) :-
+    route_dfs(X, Y, RobotType, [X], Path, 0, Distance).
+
+route_dfs(Y, Y, _, _, [], Distance, Distance).
+route_dfs(Current, Final, RobotType, Visited,
+          [link(Current, Next, D, LinkType) | RestPath], AccDistance, TotalDistance) :-
+    biarc(Current, Next, D, LinkType),
+    valid_link_for_robot(RobotType, LinkType),
+    \+ member(Next, Visited),
+    NewAccDistance is AccDistance + D,
+    route_dfs(Next, Final, RobotType, [Next | Visited], RestPath, NewAccDistance, TotalDistance).
+
+% Backwards-compatible predicates.
+% Old calls like distance(1, 11, D, _) still work, but now they are recursive.
+distance(X, Y, D, RobotType) :- route(X, Y, RobotType, _, D).
+path(X, Y, Path) :- route(X, Y, any, Path, _).
+path(X, Y, RobotType, Path) :- route(X, Y, RobotType, Path, _).
+pathdist(X, Y, p(Path, D)) :- route(X, Y, any, Path, D).
+pathdist(X, Y, RobotType, p(Path, D)) :- route(X, Y, RobotType, Path, D).
+
+% Robot-specific route helpers.
+robot_pathdist(RobotID, X, Y, p(Path, D)) :-
+    robot(RobotID, RobotType, _, _, _, _, _),
+    route(X, Y, RobotType, Path, D).
+
+shortest_path(X, Y, p(Path, D)) :-
+    shortest_path(X, Y, any, p(Path, D)).
+
+shortest_path(X, Y, RobotType, p(Path, D)) :-
+    findall(p(P, Dist), route(X, Y, RobotType, P, Dist), Routes),
+    shortest_route(Routes, p(Path, D)).
+
+shortest_path_for_robot(RobotID, X, Y, p(Path, D)) :-
+    robot(RobotID, RobotType, _, _, _, _, _),
+    shortest_path(X, Y, RobotType, p(Path, D)).
+
+longest_path(X, Y, p(Path, D)) :-
+    longest_path(X, Y, any, p(Path, D)).
+
+longest_path(X, Y, RobotType, p(Path, D)) :-
+    findall(p(P, Dist), route(X, Y, RobotType, P, Dist), Routes),
+    longest_route(Routes, p(Path, D)).
+
+longest_path_for_robot(RobotID, X, Y, p(Path, D)) :-
+    robot(RobotID, RobotType, _, _, _, _, _),
+    longest_path(X, Y, RobotType, p(Path, D)).
+
+% Backwards-compatible min/max distance predicates.
+
+shortest_route([Route], Route).
+shortest_route([p(P, D) | Rest], Best) :-
+    shortest_route(Rest, p(BestP, BestD)),
+    ( D =< BestD -> Best = p(P, D) ; Best = p(BestP, BestD) ).
+
+longest_route([Route], Route).
+longest_route([p(P, D) | Rest], Best) :-
+    longest_route(Rest, p(BestP, BestD)),
+    ( D >= BestD -> Best = p(P, D) ; Best = p(BestP, BestD) ).
+
+% Utilities used by RF8/RF9.
+path_link_types([], []).
+path_link_types([link(_, _, _, LinkType) | Rest], [LinkType | Types]) :-
+    path_link_types(Rest, Types).
+
+battery_available_units(RobotID, Available) :-
+    robot(RobotID, _, _, _, _, MaxBat, _),
+    ( op_status(RobotID, _, CurrentBatPercent, _, _) ->
+        Available is MaxBat * CurrentBatPercent / 100
+    ;
+        Available = MaxBat
+    ).
+
+battery_needed_for_distance(RobotID, Distance, Needed) :-
+    robot(RobotID, _, _, _, _, _, Consumption),
+    Needed is Distance * Consumption.
+
+robot_has_battery_for_distance(RobotID, Distance, Available, Needed) :-
+    battery_available_units(RobotID, Available),
+    battery_needed_for_distance(RobotID, Distance, Needed),
+    Needed =< Available.
+
+available_charge_point(ID, Name, 'Hub', Speed) :-
+    hub(ID, Name, 'Available', Speed).
+available_charge_point(ID, Name, 'Charge Station', Speed) :-
+    charge_station(ID, Name, 'Available', Speed).
+
+print_charge_points([]) :-
+    write('No available charging points found within the compatible route distance.'), nl.
+print_charge_points([cp(ID, Name, Kind, Speed, Distance) | Rest]) :-
+    format('~w ~w: ~w | Speed: ~w | Distance: ~w~n', [Kind, ID, Name, Speed, Distance]),
+    print_charge_points(Rest).
 
 
-maxdist(X,Y,D) :- findall(Di, distance(X,Y,Di,_), LDi),max(LDi, D).
-max([X], X).
-max([X | R], X) :- max(R, M),
-X >= M.
-max([X | R], M) :- max(R,M),
-X < M.
 
-path(X,Y, [link(X,Y,D,_)]) :- link(X,Y,D,_).
-path(X,Y, [link(X,Z,D,_) | R]) :- link(X,Z,D,_), path(Z,Y,R).
 
-pathdist(X,Y, p([link(X,Y,D,_)],D)) :- link(X,Y,D,_).
-pathdist(X,Y, p([link(X,Z,D1,_)|R],DT)) :- link(X,Z,D1,_), pathdist(Z,Y,p(R,D2)), DT is D1 + D2.
 
-biarc(X,Y,D) :- link(X,Y,D,_).
-biarc(X,Y,D) :- link(Y,X,D,_).
 
-pass_once(X,Y,TP, TD) :- stepnr(X,Y,[],TP, 0, TD).
-stepnr(CP,FP,PP,TP, PD, TD) :- biarc(CP,FP,D), addnorep(PP, link(CP, FP, D,_),TP), TD is PD + D.
-stepnr(CP,FP,PP,TP, PD, TD) :- biarc(CP,NP,D), addnorep(PP, link(CP, NP, D,_),Pi), Di is PD + D, stepnr(NP, FP, Pi, TP, Di, TD).
-addnorep(PP, link(P1,P2, D,_), Pi) :- not(passed(PP, P2)), conc(PP,[link(P1,P2, D,_)],Pi).
-passed([link(P,_,_,_)|_], P).
-passed([link(_,P,_,_)|_], P).
-passed([_|R], P) :- passed(R, P).
-conc([], L, L).
-conc([C|R], L, [C|T]) :- conc(R, L, T).
+
+
 
 
 % -------------------------------
@@ -204,7 +299,7 @@ conc([C|R], L, [C|T]) :- conc(R, L, T).
 menu :-
     repeat,
     nl,
-    write('--- FORERO TORERO CARTEL, NETWORK MANAGEMENT SYSTEM ---'), nl,
+    write('--- NETWORK MANAGEMENT SYSTEM ---'), nl,
     write('1. [RF1] Add/modify/remove a network node'), nl,
     write('2. [RF2] Add/modify/remove autonomous robots'), nl,
     write('3. [RF3] Add/modify/remove connections between network nodes'), nl,
@@ -214,7 +309,10 @@ menu :-
     write('7. [RF7] Check the current status of a specific robot'), nl,
     write('8. [RF8] List available charging stations and hubs in a given area or near a robot'), nl,    
     write('9. [RF9] Determine whether a robot can perform a given delivery'), nl,
-    write('22. [DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
+    write('10.[RF10] Determine the shortest route between two nodes'), nl,
+    write('11.[RF11] Determine the route with the lowest energy consumption'), nl, 
+    write('12. [RF12] Determine routes that include intermediate distribution points'), nl,
+    write('22.[DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
     write('Enter your choice (0-9): '),
     read(Choice),
     execute(Choice),
@@ -234,8 +332,11 @@ execute(6) :- !, list_available_robots.                 % RF6
 execute(7) :- !, check_robot_status.                    % RF7
 execute(8) :- !, listCS_menu.                           % RF8
 execute(9) :- !, check_robot_delivery_capability.       % RF9
+execute(10) :- !, shortest_route_menu.                  % RF10
+execute(11) :- !, lowest_energy_route_menu.             % RF11
+execute(12) :- !, route_with_hub_menu.                  % RF12
 execute(22):- !, view_kb.
-execute(0) :- !, write('Exiting the underworld... Goodbye!'), nl.
+execute(0) :- !, write('Exiting system... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
 
 % RF1 to RF5 Menus
@@ -326,7 +427,7 @@ handle_listCs(_) :- write('Invalid option.'), nl.
 % -------------------------------
 
 % RF1 a RF5
-% --- RF1: Nodes (Versão King Pin) ---
+% --- RF1: Nodes ---
 add_node :-
     write('Enter Node ID: '), read(ID),
     % Verifica se o nó já existe na base de dados
@@ -534,6 +635,17 @@ read_existing_robot_status_id(ID) :-
         fail
     ).
 
+read_valid_location_node(Loc) :-
+    repeat,
+    write('Enter Location Node ID: '),
+    read(Loc),
+    ( node(Loc, _) ->
+        !
+    ;
+        write('Error: Location Node ID does not exist. Please try again.'), nl,
+        fail
+    ).
+
 register_status :-
     write('Enter Robot ID: '), read(ID),
     ( robot(ID, _, _, _, _, _, _) ->
@@ -609,15 +721,16 @@ read_valid_destination_node(Dest) :-
 
 read_valid_urgency(Urg) :-
     repeat,
-    write('Enter Urgency (1 = urgent, 0 = not urgent): '),
+    write('Enter Urgency (1 = high, 2 = medium, 3 = low): '),
     read(Urg),
-    ( member(Urg, [0, 1]) ->
+    ( member(Urg, [1, 2, 3]) ->
         !
     ;
-        write('Error: Urgency must be 1 for urgent or 0 for not urgent. Please try again.'), nl,
+        write('Error: Urgency must be 1, 2, or 3. Please try again.'), nl,
         fail
     ).
 
+valid_product_list([]).
 valid_product_list([P|Rest]) :-
     product(P, _, _, _),
     valid_product_list(Rest).
@@ -716,47 +829,185 @@ check_robot_status :-
 % --- RF8: List available charging stations in given area or near a robot---
 list_charging_stations_robot :-
     write('Enter Robot ID: '), read(RobotID),
-    write('Enter search radious(m): '), read(SearchRad),
-    write('--- Available Hubs ---'), nl,
-    forall(hub(ID, Name, 'Available', Speed), format('Hub ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])),
-    write('--- Available Charge Stations ---'), nl,
-    forall(charge_station(ID, Name, 'Available', Speed), format('Station ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])).
+    write('Enter search radius: '), read(SearchRad),
+    ( robot(RobotID, RobotType, _, _, _, _, _) -> true ; write('ERROR: Robot not found.'), nl, fail ),
+    ( op_status(RobotID, RobotLoc, _, _, _) -> true ; write('ERROR: Robot has no registered location.'), nl, fail ),
+    findall(cp(ID, Name, Kind, Speed, Distance),
+        ( available_charge_point(ID, Name, Kind, Speed),
+          shortest_path_for_robot(RobotID, RobotLoc, ID, p(_, Distance)),
+          Distance =< SearchRad
+        ),
+        Points),
+    format('--- Available charging points for Robot ~w (~w) from Node ~w ---~n', [RobotID, RobotType, RobotLoc]),
+    print_charge_points(Points).
 
 list_charging_stations_node :-
-    write('Enter Node ID: '), read(RobotID),
-    write('Enter search radious(m): '), read(SearchRad),
-    write('--- Available Hubs ---'), nl,
-    forall(hub(ID, Name, 'Available', Speed), format('Hub ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])),
-    write('--- Available Charge Stations ---'), nl,
-    forall(charge_station(ID, Name, 'Available', Speed), format('Station ~w: ~w (Speed: ~w)~n', [ID, Name, Speed])).
+    write('Enter Node ID: '), read(NodeID),
+    write('Enter search radius: '), read(SearchRad),
+    ( node(NodeID, _) -> true ; write('ERROR: Node not found.'), nl, fail ),
+    findall(cp(ID, Name, Kind, Speed, Distance),
+        ( available_charge_point(ID, Name, Kind, Speed),
+          shortest_path(NodeID, ID, p(_, Distance)),
+          Distance =< SearchRad
+        ),
+        Points),
+    format('--- Available charging points from Node ~w ---~n', [NodeID]),
+    print_charge_points(Points).
 
-% --- RF9: Determine delivery capability (Capacity Check) ---
+% --- RF9: Determine delivery capability (capacity + route + battery check) ---
 check_robot_delivery_capability :-
     write('Enter Robot ID: '), read(RobotID),
     write('Enter Order ID (to check Load): '), read(OrderID),
-    
+
     % Fetch Robot data
-    (robot(RobotID, _, R_Vol, R_Weight, _, R_Bat, _) -> true ; write('Robot not found!'), nl, fail),
-    
-    % Fetch Load data related to Order
-    (load(_, OrderID, L_Vol, L_Weight) -> true ; write('Load for this order not found!'), nl, fail),
-    
-    % Fetch Robot Battery from Status
-    (op_status(RobotID, _, CurrentBat, _, _) -> true ; CurrentBat = R_Bat), 
-    
-    format('Checking if Robot ~w can carry Order ~w...~n', [RobotID, OrderID]),
+    ( robot(RobotID, RobotType, R_Vol, R_Weight, _, _, _) -> true ; write('Robot not found!'), nl, fail ),
+
+    % Fetch Order and Load data
+    ( order(OrderID, DestNode, _, _, _) -> true ; write('Order not found!'), nl, fail ),
+    ( load(_, OrderID, L_Vol, L_Weight) -> true ; write('Load for this order not found!'), nl, fail ),
+
+    % Fetch Robot operational data
+    ( op_status(RobotID, CurrentLoc, CurrentBatPercent, _, _) ->
+        true
+    ;
+        write('Robot has no operational status/location registered!'), nl,
+        fail
+    ),
+
+    format('Checking if Robot ~w (~w) can perform Order ~w...~n', [RobotID, RobotType, OrderID]),
+    format('Current location: Node ~w | Destination: Node ~w | Battery: ~w%%~n', [CurrentLoc, DestNode, CurrentBatPercent]),
     format('Robot Capacity -> Volume: ~w | Weight: ~w~n', [R_Vol, R_Weight]),
     format('Load Required  -> Volume: ~w | Weight: ~w~n', [L_Vol, L_Weight]),
-    
-    (L_Vol =< R_Vol, L_Weight =< R_Weight ->
-        write('RESULT: [YES] Robot has enough physical capacity for this delivery.'), nl,
-        (CurrentBat > 20 -> 
-            write('STATUS: Battery is above critical level.')
-        ; 
-            write('WARNING: Battery is low, might need charge!')
-        ), nl
+
+    ( L_Vol =< R_Vol, L_Weight =< R_Weight ->
+        write('CAPACITY: [OK] Robot can physically carry this load.'), nl,
+        check_robot_route_and_battery(RobotID, CurrentLoc, DestNode)
     ;
-        write('RESULT: [NO] Robot CANNOT carry this order (Exceeds capacity).'), nl
+        write('RESULT: [NO] Robot CANNOT carry this order because the load exceeds capacity.'), nl
+    ).
+
+% --- RF10: Determine the shortest route between two nodes ---
+shortest_route_menu :-
+    write('Enter start node ID: '), read(Start),
+    write('Enter end node ID: '), read(End),
+
+    ( \+ node(Start, _) ->
+        write('ERROR: Start node does not exist.'), nl
+    ; \+ node(End, _) ->
+        write('ERROR: End node does not exist.'), nl
+    ; shortest_path(Start, End, p(Path, Distance)) ->
+        format('Shortest route from Node ~w to Node ~w:~n', [Start, End]),
+        print_path(Path),
+        format('Total distance: ~w~n', [Distance])
+    ;
+        write('ERROR: No route found between these nodes.'), nl
+    ).
+
+print_path([]).
+
+print_path([link(A, B, D, Type) | Rest]) :-
+    format('~w -> ~w | Distance: ~w | Type: ~w~n', [A, B, D, Type]),
+    print_path(Rest).
+
+% --- RF11: Determine the route with the lowest energy consumption ---
+lowest_energy_route_menu :-
+    write('Enter Robot ID: '), read(RobotID),
+    write('Enter start node ID: '), read(Start),
+    write('Enter end node ID: '), read(End),
+
+    ( \+ robot(RobotID, _, _, _, _, _, _) ->
+        write('ERROR: Robot does not exist.'), nl
+    ; \+ node(Start, _) ->
+        write('ERROR: Start node does not exist.'), nl
+    ; \+ node(End, _) ->
+        write('ERROR: End node does not exist.'), nl
+    ; lowest_energy_route(RobotID, Start, End, BestPath, BestDistance, BestEnergy) ->
+        format('Lowest energy route for Robot ~w from Node ~w to Node ~w:~n', [RobotID, Start, End]),
+        print_path(BestPath),
+        format('Total distance: ~w~n', [BestDistance]),
+        format('Energy consumption: ~2f~n', [BestEnergy])
+    ;
+        write('ERROR: No compatible route found for this robot.'), nl
+    ).
+
+% --- RF12: Determine routes that include intermediate distribution points ---
+route_with_hub_menu :-
+    write('Enter start node ID: '), read(Start),
+    write('Enter end node ID: '), read(End),
+
+    ( \+ node(Start, _) ->
+        write('ERROR: Start node does not exist.'), nl
+    ; \+ node(End, _) ->
+        write('ERROR: End node does not exist.'), nl
+    ; best_route_with_hub(Start, End, HubID, FullPath, TotalDistance) ->
+        format('Best route from Node ~w to Node ~w using Hub ~w:~n', [Start, End, HubID]),
+        print_path(FullPath),
+        format('Total distance: ~w~n', [TotalDistance])
+    ;
+        write('ERROR: No valid route through an available hub was found.'), nl
+    ).
+
+best_route_with_hub(Start, End, BestHub, BestPath, BestDistance) :-
+    findall(
+        hub_route(HubID, FullPath, TotalDistance),
+        (
+            hub(HubID, _, 'Available', _),
+            shortest_path(Start, HubID, p(Path1, D1)),
+            shortest_path(HubID, End, p(Path2, D2)),
+            append(Path1, Path2, FullPath),
+            TotalDistance is D1 + D2
+        ),
+        Routes
+    ),
+    shortest_hub_route(Routes, hub_route(BestHub, BestPath, BestDistance)).
+
+shortest_hub_route([Route], Route).
+
+shortest_hub_route([hub_route(Hub1, Path1, Dist1), hub_route(_, _, Dist2) | Rest], Best) :-
+    Dist1 =< Dist2,
+    shortest_hub_route([hub_route(Hub1, Path1, Dist1) | Rest], Best).
+
+shortest_hub_route([hub_route(_, _, Dist1), hub_route(Hub2, Path2, Dist2) | Rest], Best) :-
+    Dist1 > Dist2,
+    shortest_hub_route([hub_route(Hub2, Path2, Dist2) | Rest], Best).
+lowest_energy_route(RobotID, Start, End, BestPath, BestDistance, BestEnergy) :-
+    robot(RobotID, RobotType, _, _, _, _, Consumption),
+    findall(
+        energy_route(Path, Distance, Energy),
+        (
+            route(Start, End, RobotType, Path, Distance),
+            Energy is Distance * Consumption
+        ),
+        Routes
+    ),
+    lowest_energy_from_list(Routes, energy_route(BestPath, BestDistance, BestEnergy)).
+
+lowest_energy_from_list([Route], Route).
+
+lowest_energy_from_list([energy_route(Path1, Dist1, Energy1), energy_route(_, _, Energy2) | Rest], Best) :-
+    Energy1 =< Energy2,
+    lowest_energy_from_list([energy_route(Path1, Dist1, Energy1) | Rest], Best).
+
+lowest_energy_from_list([energy_route(_, _, Energy1), energy_route(Path2, Dist2, Energy2) | Rest], Best) :-
+    Energy1 > Energy2,
+    lowest_energy_from_list([energy_route(Path2, Dist2, Energy2) | Rest], Best).
+
+check_robot_route_and_battery(RobotID, CurrentLoc, DestNode) :-
+    ( shortest_path_for_robot(RobotID, CurrentLoc, DestNode, p(Path, Distance)) ->
+        path_link_types(Path, LinkTypes),
+        battery_available_units(RobotID, Available),
+        battery_needed_for_distance(RobotID, Distance, Needed),
+        format('ROUTE: [OK] Compatible shortest path found: ~w~n', [Path]),
+        format('Route link types: ~w~n', [LinkTypes]),
+        format('Total distance: ~w~n', [Distance]),
+        format('Battery available: ~2f | Battery needed: ~2f~n', [Available, Needed]),
+        ( Needed =< Available ->
+            write('RESULT: [YES] Robot can perform this delivery with current battery.'), nl
+        ;
+            write('RESULT: [NO] Robot has a compatible route, but not enough battery.'), nl
+        )
+    ;
+        write('RESULT: [NO] No compatible route exists for this robot type.'), nl
     ).
 
 % DEV TOOL: VIEW KNOWLEDGE BASE (SUB-MENU)
