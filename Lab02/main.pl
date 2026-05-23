@@ -503,6 +503,7 @@ menu :-
     write('13.[RF13] Determine routes that include charging stations'), nl,
     write('14.[RF14] Select the best robot for a delivery'), nl,
     write('15.[RF15] Identify robots for grouped/bulk deliveries'), nl,
+    write('16.[RF16] Fleet health and risk report'), nl,
     write('22.[DBG] View Knowledge Base (Select Categories)'), nl,
     write('0. Exit'), nl,
     write('Enter your choice: '),
@@ -530,6 +531,7 @@ execute(12) :- !, route_with_hub_menu.                  % RF12
 execute(13) :- !, route_with_charging_menu.             % RF13
 execute(14) :- !, best_robot_menu.                      % RF14
 execute(15) :- !, grouped_delivery_menu.               % RF15
+execute(16) :- !, fleet_health_report.                 % RF16
 execute(22):- !, view_kb.
 execute(0) :- !, write('Exiting system... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
@@ -2105,6 +2107,175 @@ check_robot_route_and_battery(RobotID, CurrentLoc, DestNode) :-
     ;
         write('RESULT: [NO] No compatible route exists for this robot type.'), nl
     ).
+
+
+% -------------------------------
+% RF16: Fleet health and risk report
+% -------------------------------
+% This report gives a compact operational overview of the fleet.
+% Robots may appear in more than one risk section. For example, a damaged
+% robot with 5% battery appears both under battery risk and damaged robots.
+
+fleet_health_report :-
+    nl,
+    write('--- RF16: Fleet Health / Risk Report ---'), nl,
+    nl,
+    print_ready_robots_section,
+    nl,
+    print_battery_risk_section,
+    nl,
+    print_damaged_robots_section,
+    nl,
+    print_charging_robots_section,
+    nl,
+    print_busy_robots_section,
+    nl,
+    print_fleet_health_summary.
+
+robot_status_record(RobotID, Type, Loc, Bat, Status, Load) :-
+    robot(RobotID, Type, _, _, _, _, _),
+    op_status(RobotID, Loc, Bat, Status, Load).
+
+ready_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, Bat, idle, none),
+    Bat > 35.
+
+battery_risk_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, Bat, _, _),
+    Bat =< 35.
+
+damaged_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, _, damaged, _).
+
+charging_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, _, charging, _).
+
+busy_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, _, transporting, _).
+busy_robot(RobotID) :-
+    robot_status_record(RobotID, _, _, _, paused, _).
+
+
+battery_risk_label(Bat, 'CRITICAL') :-
+    Bat =< 15,
+    !.
+battery_risk_label(Bat, 'LOW') :-
+    Bat =< 35,
+    !.
+battery_risk_label(_, 'OK').
+
+print_ready_robots_section :-
+    write('READY ROBOTS:'), nl,
+    findall(RobotID, ready_robot(RobotID), Robots),
+    sort(Robots, SortedRobots),
+    ( SortedRobots == [] ->
+        write('No ready robots found.'), nl
+    ;
+        forall(member(RobotID, SortedRobots), print_ready_robot(RobotID))
+    ).
+
+print_ready_robot(RobotID) :-
+    robot_status_record(RobotID, Type, Loc, Bat, _, _),
+    format('Robot ~w | ~w | Node ~w | Battery: ~w%%~n', [RobotID, Type, Loc, Bat]).
+
+print_battery_risk_section :-
+    write('LOW / CRITICAL BATTERY:'), nl,
+    findall(RobotID, battery_risk_robot(RobotID), Robots),
+    sort(Robots, SortedRobots),
+    ( SortedRobots == [] ->
+        write('No low or critical battery robots found.'), nl
+    ;
+        forall(member(RobotID, SortedRobots), print_battery_risk_robot(RobotID))
+    ).
+
+print_battery_risk_robot(RobotID) :-
+    robot_status_record(RobotID, Type, Loc, Bat, Status, _),
+    battery_risk_label(Bat, Risk),
+    format('Robot ~w | ~w | Node ~w | Battery: ~w%% | Risk: ~w | Status: ~w~n',
+           [RobotID, Type, Loc, Bat, Risk, Status]).
+
+print_damaged_robots_section :-
+    write('DAMAGED / UNAVAILABLE ROBOTS:'), nl,
+    findall(RobotID, damaged_robot(RobotID), Robots),
+    sort(Robots, SortedRobots),
+    ( SortedRobots == [] ->
+        write('No damaged robots found.'), nl
+    ;
+        forall(member(RobotID, SortedRobots), print_damaged_robot(RobotID))
+    ).
+
+print_damaged_robot(RobotID) :-
+    robot_status_record(RobotID, Type, Loc, Bat, _, Load),
+    format('Robot ~w | ~w | Node ~w | Battery: ~w%% | Load: ~w | Action: send to maintenance~n',
+           [RobotID, Type, Loc, Bat, Load]).
+
+print_charging_robots_section :-
+    write('CHARGING ROBOTS:'), nl,
+    findall(RobotID, charging_robot(RobotID), Robots),
+    sort(Robots, SortedRobots),
+    ( SortedRobots == [] ->
+        write('No robots currently charging.'), nl
+    ;
+        forall(member(RobotID, SortedRobots), print_charging_robot(RobotID))
+    ).
+
+print_charging_robot(RobotID) :-
+    robot_status_record(RobotID, Type, Loc, Bat, _, _),
+    format('Robot ~w | ~w | Node ~w | Battery: ~w%% | Status: charging~n',
+           [RobotID, Type, Loc, Bat]).
+
+print_busy_robots_section :-
+    write('BUSY ROBOTS:'), nl,
+    findall(RobotID, busy_robot(RobotID), Robots),
+    sort(Robots, SortedRobots),
+    ( SortedRobots == [] ->
+        write('No busy robots found.'), nl
+    ;
+        forall(member(RobotID, SortedRobots), print_busy_robot(RobotID))
+    ).
+
+print_busy_robot(RobotID) :-
+    robot_status_record(RobotID, Type, Loc, Bat, Status, Load),
+    format('Robot ~w | ~w | Node ~w | Battery: ~w%% | Status: ~w | Load: ~w~n',
+           [RobotID, Type, Loc, Bat, Status, Load]).
+
+print_fleet_health_summary :-
+    count_all_robots(Total),
+    count_ready_robots(Ready),
+    count_battery_risk_robots(BatteryRisk),
+    count_damaged_robots(Damaged),
+    count_charging_robots(Charging),
+    count_busy_robots(Busy),
+    nl,
+    write('SUMMARY:'), nl,
+    format('Total robots: ~w~n', [Total]),
+    format('Ready: ~w | Busy: ~w | Charging: ~w | Damaged: ~w~n', [Ready, Busy, Charging, Damaged]),
+    format('Low/Critical battery: ~w~n', [BatteryRisk]).
+
+count_all_robots(Count) :-
+    findall(RobotID, robot(RobotID, _, _, _, _, _, _), Robots),
+    length(Robots, Count).
+
+count_ready_robots(Count) :-
+    findall(RobotID, ready_robot(RobotID), Robots),
+    length(Robots, Count).
+
+count_battery_risk_robots(Count) :-
+    findall(RobotID, battery_risk_robot(RobotID), Robots),
+    length(Robots, Count).
+
+count_damaged_robots(Count) :-
+    findall(RobotID, damaged_robot(RobotID), Robots),
+    length(Robots, Count).
+
+count_charging_robots(Count) :-
+    findall(RobotID, charging_robot(RobotID), Robots),
+    length(Robots, Count).
+
+count_busy_robots(Count) :-
+    findall(RobotID, busy_robot(RobotID), Robots),
+    length(Robots, Count).
+
 
 % DEV TOOL: VIEW KNOWLEDGE BASE (SUB-MENU)
 view_kb :-
