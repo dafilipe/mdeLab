@@ -1,5 +1,3 @@
-:- ensure_loaded('http_server/http_server.pl').
-
 % Knowledge base template
 :- dynamic node/2.
 :- dynamic robot/7.
@@ -21,6 +19,7 @@ load(3, 3, 7.5, 25.0).
 load(4, 4, 30.0, 200.0).
 load(5, 5, 6.0, 20.0).
 load(6, 6, 27.5, 175.0).
+load(20, 20, 12.0, 54.5).
 
 % order(Order_ID, Destination_node, Urgency, List_of_Products, Status)
 order(1, 4, 2, [1,1,2,2], 'In_Transit').           % Vol: 10L | Peso: 60kg
@@ -32,6 +31,7 @@ order(6, 16, 2, [5,5,5,5,5,2,2,2,2,2], 'In_Transit'). % Vol: 27.5L| Peso: 175kg
 order(7, 18, 3, [1,4], 'Pending').
 order(8, 5, 1, [2,2,2,2,2], 'Pending').
 order(9, 9, 2, [6,6,6], 'Pending').
+order(20, 10, 1, [1,2,3,4,5,6], 'Pending').
 
 % robot(ID, Type, Volume_cap, Weight_cap, Vel, Max_bat, Cons)              
 robot(1, 'Drone', 15, 25, 50, 80, 0.4).
@@ -502,8 +502,10 @@ menu :-
     write('12.[RF12] Determine routes that include intermediate distribution points'), nl,
     write('13.[RF13] Determine routes that include charging stations'), nl,
     write('14.[RF14] Select the best robot for a delivery'), nl,
-    write('22.[DBG] View Knowledge Base (Select Categories)'), nl,    write('0. Exit'), nl,
-    write('Enter your choice (0-9): '),
+    write('15.[RF15] Identify robots for grouped/bulk deliveries'), nl,
+    write('22.[DBG] View Knowledge Base (Select Categories)'), nl,
+    write('0. Exit'), nl,
+    write('Enter your choice: '),
     read(Choice),
     execute(Choice),
     Choice == 0,
@@ -527,6 +529,7 @@ execute(11) :- !, lowest_energy_route_menu.             % RF11
 execute(12) :- !, route_with_hub_menu.                  % RF12
 execute(13) :- !, route_with_charging_menu.             % RF13
 execute(14) :- !, best_robot_menu.                      % RF14
+execute(15) :- !, grouped_delivery_menu.               % RF15
 execute(22):- !, view_kb.
 execute(0) :- !, write('Exiting system... Goodbye!'), nl.
 execute(_) :- write('Invalid selection, please try again.'), nl.
@@ -1066,15 +1069,6 @@ check_robot_delivery_capability :-
         fail
     ),
 
-    % Fetch Order data and reject orders that are already being executed.
-    ( order(OrderID, DestNode, _, ProductList, OrderStatus) -> true ; write('Order not found!'), nl, fail ),
-    ( OrderStatus == 'In_Transit' ->
-        format('RESULT: [NO] Order ~w is already In_Transit and cannot be assigned again.~n', [OrderID]),
-        fail
-    ;
-        true
-    ),
-
     format('Checking if Robot ~w (~w) can perform Order ~w...~n', [RobotID, RobotType, OrderID]),
     format('Order destination: Node ~w | Order status: ~w | Products: ~w~n', [DestNode, OrderStatus, ProductList]),
     format('Robot Capacity -> Volume: ~w | Weight: ~w~n', [R_Vol, R_Weight]),
@@ -1171,44 +1165,173 @@ route_with_charging_menu :-
 
 
 % --- RF14: Select the best robot for a delivery ---
+% RF14 works in two clean passes:
+%   PASS 1: choose the best idle robot that can collect from suppliers and deliver
+%           using its current battery.
+%   PASS 2: only if PASS 1 has no solution and at least one otherwise-valid robot
+%           failed only because of battery, retry with charging stops.
+%
+% Debug is now summary-based. It does NOT print the full analysis for every robot.
 best_robot_menu :-
     write('Enter Order ID: '), read(OrderID),
+    nl,
+    write('--- RF14: Select the best robot for a delivery ---'), nl,
 
     ( \+ order(OrderID, _, _, _, _) ->
         write('ERROR: Order does not exist.'), nl
-    ; best_robot_for_order(OrderID, RobotID, Path, Distance, Energy) ->
-        format('Best robot for Order ~w: Robot ~w~n', [OrderID, RobotID]),
-        print_path(Path),
-        format('Total distance: ~w~n', [Distance]),
-        format('Energy needed: ~2f~n', [Energy])
+    ; order(OrderID, DestNode, Urgency, ProductList, OrderStatus),
+      OrderStatus == 'In_Transit' ->
+        format('ERROR: Order ~w is already In_Transit and cannot be assigned again.~n', [OrderID]),
+        format('Order details -> Destination: Node ~w | Urgency: ~w | Products: ~w | Status: ~w~n',
+               [DestNode, Urgency, ProductList, OrderStatus])
+    ; \+ order_load_requirements(OrderID, _, _) ->
+        write('ERROR: Could not calculate load requirements for this order.'), nl
     ;
-        write('ERROR: No available robot can perform this order.'), nl
+        rf14_print_order_summary(OrderID),
+        order_products_missing_suppliers(OrderID, MissingProducts),
+        ( MissingProducts \= [] ->
+            format('SUPPLIERS: [NO] Products without registered supplier: ~w~n', [MissingProducts]),
+            write('ERROR: No robot can be selected until all products have suppliers.'), nl
+        ;
+            write('SUPPLIERS: [OK] Every product has at least one registered supplier.'), nl,
+            rf14_print_candidate_summary(OrderID),
+            ( best_robot_for_order(OrderID, RobotID, Path, Distance, Energy, Mode, ChargeStops, ChargePoints) ->
+                rf14_print_final_result(OrderID, RobotID, Path, Distance, Energy, Mode, ChargeStops, ChargePoints)
+            ;
+                write('ERROR: No available robot can perform this order, even with charging fallback.'), nl
+            )
+        )
     ).
 
+rf14_print_order_summary(OrderID) :-
+    order(OrderID, DestNode, Urgency, ProductList, OrderStatus),
+    order_load_requirements(OrderID, LVol, LWeight),
+    format('Order ~w details -> Destination: Node ~w | Urgency: ~w | Products: ~w | Status: ~w~n',
+           [OrderID, DestNode, Urgency, ProductList, OrderStatus]),
+    format('Order load requirements -> Volume: ~w | Weight: ~w~n', [LVol, LWeight]).
+
+% Compact candidate report: counts only, no per-robot route dumps.
+rf14_print_candidate_summary(OrderID) :-
+    findall(R, rf14_idle_capacity_route_candidate(OrderID, R, _, _, _, _, _, _), CandidateRobotsRaw),
+    sort(CandidateRobotsRaw, CandidateRobots),
+    length(CandidateRobots, CandidateCount),
+    findall(R, robot_can_do_order_option(OrderID, R, _, _, _), DirectRobotsRaw),
+    sort(DirectRobotsRaw, DirectRobots),
+    length(DirectRobots, DirectCount),
+    findall(R, rf14_battery_limited_candidate(OrderID, R, _, _, _, _, _, _), BatteryRobotsRaw),
+    sort(BatteryRobotsRaw, BatteryRobots),
+    length(BatteryRobots, BatteryCount),
+    nl,
+    write('--- RF14 SUMMARY ---'), nl,
+    format('Idle robots with capacity and supplier-compatible route: ~w -> ~w~n', [CandidateCount, CandidateRobots]),
+    format('PASS 1 direct valid robots: ~w -> ~w~n', [DirectCount, DirectRobots]),
+    ( DirectCount > 0 ->
+        write('PASS 2 charging fallback: skipped because at least one robot can do the delivery without charging.'), nl
+    ;
+        format('PASS 2 battery-limited candidates: ~w -> ~w~n', [BatteryCount, BatteryRobots]),
+        ( BatteryCount =:= 0 ->
+            write('PASS 2 charging fallback: skipped because no robot failed only because of battery.'), nl
+        ;
+            write('PASS 2 charging fallback: enabled. Searching bounded charging routes...'), nl
+        )
+    ).
+
+% Backwards-compatible RF14 predicate for older calls.
 best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy) :-
+    best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy, _, _, _).
+
+% PASS 1: best direct option, no charging.
+best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy, direct, 0, []) :-
     findall(
         robot_option(RobotID, Path, Distance, Energy),
         robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy),
         Options
     ),
-    best_robot_from_list(Options, robot_option(BestRobotID, BestPath, BestDistance, BestEnergy)).
+    Options \= [],
+    best_robot_from_list(Options, robot_option(BestRobotID, BestPath, BestDistance, BestEnergy)),
+    !.
 
-robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy) :-
+% PASS 2: fallback using charging stops. This only runs when PASS 1 has no option
+% and at least one robot failed only because of battery.
+best_robot_for_order(OrderID, BestRobotID, BestPath, BestDistance, BestEnergy, charging, ChargeStops, ChargePoints) :-
+    findall(
+        robot_option(RobotID, Path, Distance, Energy),
+        robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy),
+        DirectOptions
+    ),
+    DirectOptions == [],
+    findall(RobotID, rf14_battery_limited_candidate(OrderID, RobotID, _, _, _, _, _, _), BatteryBlockedRobots),
+    BatteryBlockedRobots \= [],
+    findall(
+        robot_charge_option(RobotID, Path, Distance, Energy, Stops, Points),
+        robot_can_do_order_with_charging_option(OrderID, RobotID, Path, Distance, Energy, Stops, Points),
+        ChargingOptions
+    ),
+    ChargingOptions \= [],
+    best_charged_robot_from_list(
+        ChargingOptions,
+        robot_charge_option(BestRobotID, BestPath, BestDistance, BestEnergy, ChargeStops, ChargePoints)
+    ).
+
+% Robot is idle, has capacity, and has a supplier-aware route. Battery is not
+% checked here; this is used for summary and for the fallback gate.
+rf14_idle_capacity_route_candidate(OrderID, RobotID, Path, Distance, Energy, Available, SupplierNodes, VisitOrder) :-
     order_load_requirements(OrderID, LVol, LWeight),
-
     robot(RobotID, _, RVol, RWeight, _, _, Consumption),
     op_status(RobotID, CurrentLoc, _, idle, none),
-
     LVol =< RVol,
     LWeight =< RWeight,
-
-    best_order_route_via_suppliers(RobotID, CurrentLoc, OrderID, Path, Distance, _, _),
+    best_order_route_via_suppliers(RobotID, CurrentLoc, OrderID, Path, Distance, SupplierNodes, VisitOrder),
     Energy is Distance * Consumption,
+    battery_available_units(RobotID, Available).
 
-    robot_has_battery_for_distance(RobotID, Distance, _, _).
+% PASS 1 option: same as above, but energy must fit in current battery.
+robot_can_do_order_option(OrderID, RobotID, Path, Distance, Energy) :-
+    rf14_idle_capacity_route_candidate(OrderID, RobotID, Path, Distance, Energy, Available, _, _),
+    Energy =< Available.
+
+% A robot reaches fallback only when it is otherwise valid but failed because of battery.
+rf14_battery_limited_candidate(OrderID, RobotID, Path, Distance, Energy, Available, SupplierNodes, VisitOrder) :-
+    rf14_idle_capacity_route_candidate(OrderID, RobotID, Path, Distance, Energy, Available, SupplierNodes, VisitOrder),
+    Energy > Available.
+
+% PASS 2 option: bounded charging route. This prevents the previous broad
+% recursive search from hanging.
+robot_can_do_order_with_charging_option(OrderID, RobotID, Path, Distance, Energy, ChargeStops, ChargePoints) :-
+    rf14_battery_limited_candidate(OrderID, RobotID, _, _, _, _, _, _),
+    best_order_route_via_suppliers_with_charging(
+        RobotID, _, OrderID, Path, Distance, Energy, _, _, ChargeStops, ChargePoints, _
+    ).
+
+rf14_print_final_result(OrderID, RobotID, Path, Distance, Energy, Mode, ChargeStops, ChargePoints) :-
+    nl,
+    write('--- RF14 FINAL RESULT ---'), nl,
+    format('Best robot for Order ~w: Robot ~w~n', [OrderID, RobotID]),
+    ( Mode == direct ->
+        write('Selection mode: direct route without charging.'), nl,
+        write('Charging: not needed.'), nl
+    ;
+        write('Selection mode: charging fallback.'), nl,
+        format('Charging stops needed: ~w~n', [ChargeStops]),
+        write('Chosen charging points:'), nl,
+        print_charge_visit_details(ChargePoints)
+    ),
+    write('Chosen path:'), nl,
+    print_path(Path),
+    format('Total distance: ~w~n', [Distance]),
+    format('Energy needed for movement: ~2f~n', [Energy]).
+
+print_charge_visit_details([]) :-
+    write('  none'), nl.
+print_charge_visit_details([ChargeNode | Rest]) :-
+    ( available_charge_point(ChargeNode, Name, Kind, Speed) ->
+        format('  ~w Node ~w (~w) | Charge speed: ~w~n', [Kind, ChargeNode, Name, Speed])
+    ;
+        format('  Node ~w~n', [ChargeNode])
+    ),
+    print_charge_visit_details(Rest).
 
 best_robot_from_list([Option], Option).
-
 best_robot_from_list(
     [robot_option(Robot1, Path1, Dist1, Energy1),
      robot_option(_, _, _, Energy2) | Rest],
@@ -1216,7 +1339,6 @@ best_robot_from_list(
 ) :-
     Energy1 =< Energy2,
     best_robot_from_list([robot_option(Robot1, Path1, Dist1, Energy1) | Rest], Best).
-
 best_robot_from_list(
     [robot_option(_, _, _, Energy1),
      robot_option(Robot2, Path2, Dist2, Energy2) | Rest],
@@ -1224,6 +1346,667 @@ best_robot_from_list(
 ) :-
     Energy1 > Energy2,
     best_robot_from_list([robot_option(Robot2, Path2, Dist2, Energy2) | Rest], Best).
+
+best_charged_robot_from_list([Option], Option).
+best_charged_robot_from_list(
+    [robot_charge_option(Robot1, Path1, Dist1, Energy1, Stops1, Points1),
+     robot_charge_option(_, _, Dist2, Energy2, Stops2, _) | Rest],
+    Best
+) :-
+    charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_charged_robot_from_list([robot_charge_option(Robot1, Path1, Dist1, Energy1, Stops1, Points1) | Rest], Best).
+best_charged_robot_from_list(
+    [robot_charge_option(_, _, Dist1, Energy1, Stops1, _),
+     robot_charge_option(Robot2, Path2, Dist2, Energy2, Stops2, Points2) | Rest],
+    Best
+) :-
+    \+ charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_charged_robot_from_list([robot_charge_option(Robot2, Path2, Dist2, Energy2, Stops2, Points2) | Rest], Best).
+
+charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2) :-
+    ( Stops1 < Stops2 -> true
+    ; Stops1 =:= Stops2, Energy1 < Energy2 -> true
+    ; Stops1 =:= Stops2, Energy1 =:= Energy2, Dist1 =< Dist2
+    ).
+
+% Supplier-aware route planner with bounded charging fallback.
+% It still allows more than one charge, but avoids the previous unbounded recursion.
+best_order_route_via_suppliers_with_charging(
+    RobotID, Start, OrderID, BestPath, BestDistance, BestEnergy,
+    BestSupplierNodes, BestVisitOrder, BestChargeStops, BestChargePoints, BestFinalBattery
+) :-
+    ( nonvar(Start) -> EffectiveStart = Start ; op_status(RobotID, EffectiveStart, _, _, _) ),
+    battery_available_units(RobotID, StartBattery),
+    findall(
+        charged_supplier_route(SupplierNodes, VisitOrder, Path, Distance, Energy, ChargeStops, ChargePoints, FinalBattery),
+        (
+            order(OrderID, Destination, _, _, _),
+            order_supplier_nodes_option(OrderID, SupplierNodes),
+            permutation(SupplierNodes, VisitOrder),
+            build_charging_route_for_visit_order(
+                RobotID, EffectiveStart, VisitOrder, Destination, StartBattery,
+                Path, Distance, Energy, FinalBattery, ChargeStops, ChargePoints
+            )
+        ),
+        Routes
+    ),
+    best_charging_supplier_route(
+        Routes,
+        charged_supplier_route(BestSupplierNodes, BestVisitOrder, BestPath, BestDistance, BestEnergy, BestChargeStops, BestChargePoints, BestFinalBattery)
+    ).
+
+build_charging_route_for_visit_order(
+    RobotID, Start, VisitOrder, Destination, StartBattery,
+    FullPath, TotalDistance, TotalEnergy, FinalBattery, ChargeStops, ChargePoints
+) :-
+    append(VisitOrder, [Destination], Stops),
+    build_charging_route_through_points(
+        RobotID, Start, Stops, StartBattery,
+        FullPath, TotalDistance, TotalEnergy, FinalBattery, ChargeStops, ChargePoints
+    ).
+
+build_charging_route_through_points(_, _, [], Battery, [], 0, 0, Battery, 0, []).
+build_charging_route_through_points(
+    RobotID, Current, [Next | Rest], BatteryIn,
+    FullPath, TotalDistance, TotalEnergy, FinalBattery, TotalChargeStops, ChargePoints
+) :-
+    best_route_leg_with_charging_bounded(
+        RobotID, Current, Next, BatteryIn,
+        LegPath, LegDistance, LegEnergy, BatteryAfterLeg, LegChargeStops, LegChargePoints
+    ),
+    build_charging_route_through_points(
+        RobotID, Next, Rest, BatteryAfterLeg,
+        RestPath, RestDistance, RestEnergy, FinalBattery, RestChargeStops, RestChargePoints
+    ),
+    append(LegPath, RestPath, FullPath),
+    append(LegChargePoints, RestChargePoints, ChargePoints),
+    TotalDistance is LegDistance + RestDistance,
+    TotalEnergy is LegEnergy + RestEnergy,
+    TotalChargeStops is LegChargeStops + RestChargeStops.
+
+% For each leg, try 0, 1, or 2 charges and choose the best option.
+% This supports charging more than once between two required points, but keeps the search finite.
+best_route_leg_with_charging_bounded(RobotID, From, To, BatteryIn, BestPath, BestDistance, BestEnergy, BestBatteryOut, BestStops, BestChargePoints) :-
+    findall(
+        leg_option(Path, Distance, Energy, BatteryOut, Stops, Points),
+        route_leg_with_charging_bounded_option(RobotID, From, To, BatteryIn, Path, Distance, Energy, BatteryOut, Stops, Points),
+        Options
+    ),
+    best_leg_option_from_list(Options, leg_option(BestPath, BestDistance, BestEnergy, BestBatteryOut, BestStops, BestChargePoints)).
+
+route_leg_with_charging_bounded_option(RobotID, From, To, BatteryIn, Path, Distance, Energy, BatteryOut, 0, []) :-
+    shortest_path_for_robot(RobotID, From, To, p(Path, Distance)),
+    battery_needed_for_distance(RobotID, Distance, Energy),
+    Energy =< BatteryIn,
+    BatteryOut is BatteryIn - Energy.
+route_leg_with_charging_bounded_option(RobotID, From, To, BatteryIn, FullPath, TotalDistance, TotalEnergy, BatteryOut, 1, [Charge1]) :-
+    available_charge_point(Charge1, _, _, _),
+    shortest_leg_if_reachable(RobotID, From, Charge1, BatteryIn, Path1, Dist1, Energy1),
+    robot(RobotID, _, _, _, _, MaxBattery, _),
+    shortest_leg_if_reachable(RobotID, Charge1, To, MaxBattery, Path2, Dist2, Energy2),
+    append(Path1, Path2, FullPath),
+    TotalDistance is Dist1 + Dist2,
+    TotalEnergy is Energy1 + Energy2,
+    BatteryOut is MaxBattery - Energy2.
+route_leg_with_charging_bounded_option(RobotID, From, To, BatteryIn, FullPath, TotalDistance, TotalEnergy, BatteryOut, 2, [Charge1, Charge2]) :-
+    available_charge_point(Charge1, _, _, _),
+    available_charge_point(Charge2, _, _, _),
+    Charge1 \== Charge2,
+    shortest_leg_if_reachable(RobotID, From, Charge1, BatteryIn, Path1, Dist1, Energy1),
+    robot(RobotID, _, _, _, _, MaxBattery, _),
+    shortest_leg_if_reachable(RobotID, Charge1, Charge2, MaxBattery, Path2, Dist2, Energy2),
+    shortest_leg_if_reachable(RobotID, Charge2, To, MaxBattery, Path3, Dist3, Energy3),
+    append(Path1, Path2, TempPath),
+    append(TempPath, Path3, FullPath),
+    TotalDistance is Dist1 + Dist2 + Dist3,
+    TotalEnergy is Energy1 + Energy2 + Energy3,
+    BatteryOut is MaxBattery - Energy3.
+
+shortest_leg_if_reachable(_, From, From, _, [], 0, 0).
+shortest_leg_if_reachable(RobotID, From, To, BatteryIn, Path, Distance, Energy) :-
+    From \== To,
+    shortest_path_for_robot(RobotID, From, To, p(Path, Distance)),
+    battery_needed_for_distance(RobotID, Distance, Energy),
+    Energy =< BatteryIn.
+
+best_leg_option_from_list([Option], Option).
+best_leg_option_from_list(
+    [leg_option(Path1, Dist1, Energy1, Battery1, Stops1, Points1),
+     leg_option(_, Dist2, Energy2, _, Stops2, _) | Rest],
+    Best
+) :-
+    charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_leg_option_from_list([leg_option(Path1, Dist1, Energy1, Battery1, Stops1, Points1) | Rest], Best).
+best_leg_option_from_list(
+    [leg_option(_, Dist1, Energy1, _, Stops1, _),
+     leg_option(Path2, Dist2, Energy2, Battery2, Stops2, Points2) | Rest],
+    Best
+) :-
+    \+ charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_leg_option_from_list([leg_option(Path2, Dist2, Energy2, Battery2, Stops2, Points2) | Rest], Best).
+
+best_charging_supplier_route([Route], Route).
+best_charging_supplier_route(
+    [charged_supplier_route(Sup1, Visit1, Path1, Dist1, Energy1, Stops1, Points1, FinalBat1),
+     charged_supplier_route(_, _, _, Dist2, Energy2, Stops2, _, _) | Rest],
+    Best
+) :-
+    charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_charging_supplier_route(
+        [charged_supplier_route(Sup1, Visit1, Path1, Dist1, Energy1, Stops1, Points1, FinalBat1) | Rest],
+        Best
+    ).
+best_charging_supplier_route(
+    [charged_supplier_route(_, _, _, Dist1, Energy1, Stops1, _, _),
+     charged_supplier_route(Sup2, Visit2, Path2, Dist2, Energy2, Stops2, Points2, FinalBat2) | Rest],
+    Best
+) :-
+    \+ charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_charging_supplier_route(
+        [charged_supplier_route(Sup2, Visit2, Path2, Dist2, Energy2, Stops2, Points2, FinalBat2) | Rest],
+        Best
+    ).
+
+
+
+% -------------------------------
+% RF15: Grouped/bulk deliveries
+% -------------------------------
+% RF15 now considers two mission models:
+%   1) no-hub grouped delivery: one robot collects from all required suppliers
+%      and delivers the grouped orders directly to the destination node(s);
+%   2) hub-assisted grouped delivery: one or more collector robots gather loads
+%      from suppliers, consolidate them at an available hub, and one of those
+%      robots performs the final bulk delivery.
+%
+% In the hub-assisted model, RF15 does NOT force one robot per supplier. A
+% collector robot may be assigned multiple supplier loads when its capacity,
+% battery/autonomy and route compatibility allow it.
+
+grouped_delivery_menu :-
+    write('Enter list of Order IDs for grouped delivery (e.g., [20] or [7,8,9]): '),
+    read(OrderIDsInput),
+    nl,
+    write('--- RF15: Grouped/bulk delivery planning ---'), nl,
+    ( \+ is_list(OrderIDsInput) ->
+        write('ERROR: Please enter a Prolog list, for example [20] or [7,8,9].'), nl
+    ; OrderIDsInput == [] ->
+        write('ERROR: The grouped delivery list cannot be empty.'), nl
+    ;
+        sort(OrderIDsInput, OrderIDs),
+        rf15_validate_and_run(OrderIDs)
+    ).
+
+rf15_validate_and_run(OrderIDs) :-
+    rf15_missing_orders(OrderIDs, MissingOrders),
+    rf15_non_pending_orders(OrderIDs, NonPendingOrders),
+    ( MissingOrders \= [] ->
+        format('ERROR: These orders do not exist: ~w~n', [MissingOrders])
+    ; NonPendingOrders \= [] ->
+        format('ERROR: RF15 only groups Pending orders. Invalid orders/statuses: ~w~n', [NonPendingOrders])
+    ; order_products_missing_suppliers_for_orders(OrderIDs, MissingProducts),
+      MissingProducts \= [] ->
+        format('ERROR: These products have no registered supplier: ~w~n', [MissingProducts])
+    ;
+        rf15_print_group_summary(OrderIDs),
+        ( best_rf15_grouped_delivery_plan(OrderIDs, BestPlan, DirectCount, HubCount) ->
+            format('Candidate plans found -> No-hub: ~w | Hub-assisted: ~w~n', [DirectCount, HubCount]),
+            rf15_print_plan(BestPlan)
+        ;
+            write('RESULT: [NO] No valid grouped delivery plan was found.'), nl,
+            write('Reason may be capacity, route compatibility, battery/autonomy, hub availability, or robot status.'), nl
+        )
+    ).
+
+rf15_missing_orders(OrderIDs, MissingOrders) :-
+    findall(OrderID,
+        ( member(OrderID, OrderIDs),
+          \+ order(OrderID, _, _, _, _)
+        ),
+        MissingOrders).
+
+rf15_non_pending_orders(OrderIDs, NonPendingOrders) :-
+    findall(OrderID-Status,
+        ( member(OrderID, OrderIDs),
+          order(OrderID, _, _, _, Status),
+          Status \== 'Pending'
+        ),
+        NonPendingOrders).
+
+rf15_group_products(OrderIDs, Products) :-
+    findall(ProductID,
+        ( member(OrderID, OrderIDs),
+          order(OrderID, _, _, ProductList, _),
+          member(ProductID, ProductList)
+        ),
+        Products).
+
+order_products_missing_suppliers_for_orders(OrderIDs, MissingProducts) :-
+    rf15_group_products(OrderIDs, Products),
+    sort(Products, UniqueProducts),
+    findall(ProductID,
+        ( member(ProductID, UniqueProducts),
+          \+ product_has_supplier(ProductID)
+        ),
+        MissingProducts).
+
+rf15_group_destinations(OrderIDs, Destinations) :-
+    findall(Destination,
+        ( member(OrderID, OrderIDs),
+          order(OrderID, Destination, _, _, _)
+        ),
+        RawDestinations),
+    sort(RawDestinations, Destinations).
+
+rf15_orders_load_requirements([], 0, 0).
+rf15_orders_load_requirements([OrderID | Rest], TotalVolume, TotalWeight) :-
+    order_load_requirements(OrderID, Volume, Weight),
+    rf15_orders_load_requirements(Rest, RestVolume, RestWeight),
+    TotalVolume is Volume + RestVolume,
+    TotalWeight is Weight + RestWeight.
+
+rf15_supplier_loads_for_orders(OrderIDs, SupplierLoads) :-
+    rf15_group_products(OrderIDs, Products),
+    findall(SupplierID-ProductID,
+        ( member(ProductID, Products),
+          once(product_supplier(ProductID, SupplierID))
+        ),
+        Assignments),
+    rf15_supplier_loads_from_assignments(Assignments, SupplierLoads).
+
+rf15_supplier_loads_from_assignments(Assignments, SupplierLoads) :-
+    findall(SupplierID, member(SupplierID-_, Assignments), SupplierIDsRaw),
+    sort(SupplierIDsRaw, SupplierIDs),
+    rf15_build_supplier_loads(SupplierIDs, Assignments, SupplierLoads).
+
+rf15_build_supplier_loads([], _, []).
+rf15_build_supplier_loads([SupplierID | Rest], Assignments,
+                          [supplier_load(SupplierID, Products, Volume, Weight) | RestLoads]) :-
+    findall(ProductID, member(SupplierID-ProductID, Assignments), Products),
+    order_products_totals(Products, Volume, Weight),
+    rf15_build_supplier_loads(Rest, Assignments, RestLoads).
+
+rf15_supplier_nodes([], []).
+rf15_supplier_nodes([supplier_load(SupplierID, _, _, _) | Rest], [SupplierID | RestIDs]) :-
+    rf15_supplier_nodes(Rest, RestIDs).
+
+rf15_supplier_loads_totals([], [], 0, 0).
+rf15_supplier_loads_totals([supplier_load(_, Products, Volume, Weight) | Rest], AllProducts, TotalVolume, TotalWeight) :-
+    rf15_supplier_loads_totals(Rest, RestProducts, RestVolume, RestWeight),
+    append(Products, RestProducts, AllProducts),
+    TotalVolume is Volume + RestVolume,
+    TotalWeight is Weight + RestWeight.
+
+rf15_print_group_summary(OrderIDs) :-
+    rf15_orders_load_requirements(OrderIDs, TotalVolume, TotalWeight),
+    rf15_group_destinations(OrderIDs, Destinations),
+    rf15_supplier_loads_for_orders(OrderIDs, SupplierLoads),
+    nl,
+    format('Grouped orders: ~w~n', [OrderIDs]),
+    format('Delivery destinations: ~w~n', [Destinations]),
+    format('Total grouped load -> Volume: ~w | Weight: ~w~n', [TotalVolume, TotalWeight]),
+    write('Supplier pickup loads:'), nl,
+    rf15_print_supplier_loads(SupplierLoads),
+    nl.
+
+rf15_print_supplier_loads([]).
+rf15_print_supplier_loads([supplier_load(SupplierID, Products, Volume, Weight) | Rest]) :-
+    ( supplier(SupplierID, SupplierName, _) -> true ; SupplierName = 'Unknown supplier' ),
+    format('  Supplier Node ~w (~w) -> Products: ~w | Volume: ~w | Weight: ~w~n',
+           [SupplierID, SupplierName, Products, Volume, Weight]),
+    rf15_print_supplier_loads(Rest).
+
+% ------------------------------------------------------------------
+% Best RF15 plan across both models.
+% Comparison favours:
+%   1) fewer charging stops,
+%   2) lower total movement energy,
+%   3) shorter total distance,
+%   4) fewer robots,
+%   5) no-hub plan if everything else ties.
+% ------------------------------------------------------------------
+
+best_rf15_grouped_delivery_plan(OrderIDs, BestPlan, DirectCount, HubCount) :-
+    findall(Plan, rf15_no_hub_plan(OrderIDs, Plan), DirectPlans),
+    findall(Plan, rf15_hub_consolidation_plan(OrderIDs, Plan), HubPlans),
+    length(DirectPlans, DirectCount),
+    length(HubPlans, HubCount),
+    append(DirectPlans, HubPlans, AllPlans),
+    AllPlans \= [],
+    best_rf15_plan_from_list(AllPlans, BestPlan).
+
+% No-hub plan: one robot collects all supplier loads and performs all deliveries.
+rf15_no_hub_plan(OrderIDs,
+    rf15_no_hub_plan(RobotID, SupplierLoads, SupplierVisitOrder, Destinations, DestVisitOrder,
+                     Path, Distance, Energy, ChargeStops, ChargePoints)
+) :-
+    rf15_supplier_loads_for_orders(OrderIDs, SupplierLoads),
+    rf15_supplier_nodes(SupplierLoads, SupplierNodes),
+    rf15_group_destinations(OrderIDs, Destinations),
+    rf15_orders_load_requirements(OrderIDs, TotalVolume, TotalWeight),
+
+    robot(RobotID, _, RobotVolumeCap, RobotWeightCap, _, _, _),
+    op_status(RobotID, CurrentLoc, _, idle, none),
+    TotalVolume =< RobotVolumeCap,
+    TotalWeight =< RobotWeightCap,
+    battery_available_units(RobotID, StartBattery),
+
+    permutation(SupplierNodes, SupplierVisitOrder),
+    permutation(Destinations, DestVisitOrder),
+    append(SupplierVisitOrder, DestVisitOrder, FullVisitOrder),
+    rf15_best_route_through_points_bounded(
+        RobotID, CurrentLoc, FullVisitOrder, StartBattery,
+        Path, Distance, Energy, _, ChargeStops, ChargePoints
+    ).
+
+% Hub-assisted plan: supplier loads may be grouped per collector robot. A robot
+% may collect from one supplier or from several suppliers before going to the hub.
+rf15_hub_consolidation_plan(OrderIDs,
+    rf15_hub_plan(HubID, HubName, Collectors, FinalRobotID, Destinations, DestVisitOrder,
+                  FinalPath, FinalDistance, FinalEnergy,
+                  TotalDistance, TotalEnergy, TotalChargeStops, AllChargePoints)
+) :-
+    hub(HubID, HubName, 'Available', _),
+    rf15_supplier_loads_for_orders(OrderIDs, SupplierLoads),
+    rf15_group_destinations(OrderIDs, Destinations),
+    rf15_orders_load_requirements(OrderIDs, TotalVolume, TotalWeight),
+
+    rf15_assign_supplier_loads_to_robots(SupplierLoads, Assignments),
+    rf15_group_assignments_by_robot(Assignments, RobotGroups),
+    rf15_collectors_for_robot_groups(
+        RobotGroups, HubID, Collectors, CollectorRobotIDs,
+        CollectorsDistance, CollectorsEnergy, CollectorsChargeStops, CollectorsChargePoints
+    ),
+
+    member(FinalRobotID, CollectorRobotIDs),
+    robot(FinalRobotID, _, FinalVolCap, FinalWeightCap, _, FinalMaxBattery, _),
+    TotalVolume =< FinalVolCap,
+    TotalWeight =< FinalWeightCap,
+
+    rf15_best_destination_route_from_hub(
+        FinalRobotID, HubID, Destinations, FinalMaxBattery,
+        DestVisitOrder, FinalPath, FinalDistance, FinalEnergy,
+        FinalChargeStops, FinalChargePoints
+    ),
+
+    append(CollectorsChargePoints, FinalChargePoints, AllChargePoints),
+    TotalDistance is CollectorsDistance + FinalDistance,
+    TotalEnergy is CollectorsEnergy + FinalEnergy,
+    TotalChargeStops is CollectorsChargeStops + FinalChargeStops.
+
+rf15_idle_robot(RobotID) :-
+    robot(RobotID, _, _, _, _, _, _),
+    op_status(RobotID, _, _, idle, none).
+
+rf15_assign_supplier_loads_to_robots([], []).
+rf15_assign_supplier_loads_to_robots([SupplierLoad | Rest], [assignment(RobotID, SupplierLoad) | RestAssignments]) :-
+    rf15_idle_robot(RobotID),
+    rf15_assign_supplier_loads_to_robots(Rest, RestAssignments).
+
+rf15_group_assignments_by_robot(Assignments, RobotGroups) :-
+    findall(RobotID, member(assignment(RobotID, _), Assignments), RobotIDsRaw),
+    sort(RobotIDsRaw, RobotIDs),
+    rf15_build_robot_groups(RobotIDs, Assignments, RobotGroups).
+
+rf15_build_robot_groups([], _, []).
+rf15_build_robot_groups([RobotID | Rest], Assignments, [robot_group(RobotID, SupplierLoads) | RestGroups]) :-
+    findall(SupplierLoad, member(assignment(RobotID, SupplierLoad), Assignments), SupplierLoads),
+    SupplierLoads \= [],
+    rf15_build_robot_groups(Rest, Assignments, RestGroups).
+
+rf15_collectors_for_robot_groups([], _, [], [], 0, 0, 0, []).
+rf15_collectors_for_robot_groups(
+    [RobotGroup | RestGroups], HubID,
+    [Collector | RestCollectors], [RobotID | RestRobotIDs],
+    TotalDistance, TotalEnergy, TotalChargeStops, AllChargePoints
+) :-
+    rf15_collector_group_option(RobotGroup, HubID, Collector),
+    Collector = collector(RobotID, _, _, _, _, _, _, Distance, Energy, ChargeStops, ChargePoints),
+    rf15_collectors_for_robot_groups(
+        RestGroups, HubID,
+        RestCollectors, RestRobotIDs,
+        RestDistance, RestEnergy, RestChargeStops, RestChargePoints
+    ),
+    append(ChargePoints, RestChargePoints, AllChargePoints),
+    TotalDistance is Distance + RestDistance,
+    TotalEnergy is Energy + RestEnergy,
+    TotalChargeStops is ChargeStops + RestChargeStops.
+
+rf15_collector_group_option(
+    robot_group(RobotID, SupplierLoads), HubID,
+    collector(RobotID, SupplierIDs, SupplierVisitOrder, Products, Volume, Weight,
+              Path, Distance, Energy, ChargeStops, ChargePoints)
+) :-
+    rf15_supplier_nodes(SupplierLoads, SupplierIDs),
+    rf15_supplier_loads_totals(SupplierLoads, Products, Volume, Weight),
+    robot(RobotID, _, RobotVolumeCap, RobotWeightCap, _, _, _),
+    op_status(RobotID, CurrentLoc, _, idle, none),
+    Volume =< RobotVolumeCap,
+    Weight =< RobotWeightCap,
+    battery_available_units(RobotID, StartBattery),
+    rf15_best_collector_route_to_hub(
+        RobotID, CurrentLoc, SupplierIDs, HubID, StartBattery,
+        SupplierVisitOrder, Path, Distance, Energy, ChargeStops, ChargePoints
+    ).
+
+rf15_best_collector_route_to_hub(
+    RobotID, CurrentLoc, SupplierIDs, HubID, StartBattery,
+    BestSupplierVisitOrder, BestPath, BestDistance, BestEnergy, BestChargeStops, BestChargePoints
+) :-
+    findall(route_option(SupplierVisitOrder, Path, Distance, Energy, ChargeStops, ChargePoints),
+        ( permutation(SupplierIDs, SupplierVisitOrder),
+          append(SupplierVisitOrder, [HubID], VisitOrderWithHub),
+          rf15_best_route_through_points_bounded(
+              RobotID, CurrentLoc, VisitOrderWithHub, StartBattery,
+              Path, Distance, Energy, _, ChargeStops, ChargePoints
+          )
+        ),
+        Options),
+    Options \= [],
+    best_rf15_route_option_from_list(
+        Options,
+        route_option(BestSupplierVisitOrder, BestPath, BestDistance, BestEnergy, BestChargeStops, BestChargePoints)
+    ).
+
+rf15_best_destination_route_from_hub(
+    RobotID, HubID, Destinations, StartBattery,
+    BestDestVisitOrder, BestPath, BestDistance, BestEnergy, BestChargeStops, BestChargePoints
+) :-
+    findall(route_option(DestVisitOrder, Path, Distance, Energy, ChargeStops, ChargePoints),
+        ( permutation(Destinations, DestVisitOrder),
+          rf15_best_route_through_points_bounded(
+              RobotID, HubID, DestVisitOrder, StartBattery,
+              Path, Distance, Energy, _, ChargeStops, ChargePoints
+          )
+        ),
+        Options),
+    Options \= [],
+    best_rf15_route_option_from_list(
+        Options,
+        route_option(BestDestVisitOrder, BestPath, BestDistance, BestEnergy, BestChargeStops, BestChargePoints)
+    ).
+
+best_rf15_route_option_from_list([Option], Option).
+best_rf15_route_option_from_list(
+    [route_option(Visit1, Path1, Dist1, Energy1, Stops1, Points1),
+     route_option(_, _, Dist2, Energy2, Stops2, _) | Rest],
+    Best
+) :-
+    charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_rf15_route_option_from_list([route_option(Visit1, Path1, Dist1, Energy1, Stops1, Points1) | Rest], Best).
+best_rf15_route_option_from_list(
+    [route_option(_, _, Dist1, Energy1, Stops1, _),
+     route_option(Visit2, Path2, Dist2, Energy2, Stops2, Points2) | Rest],
+    Best
+) :-
+    \+ charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_rf15_route_option_from_list([route_option(Visit2, Path2, Dist2, Energy2, Stops2, Points2) | Rest], Best).
+
+best_rf15_plan_from_list([Plan], Plan).
+best_rf15_plan_from_list([Plan1, Plan2 | Rest], Best) :-
+    rf15_plan_better_or_equal(Plan1, Plan2),
+    best_rf15_plan_from_list([Plan1 | Rest], Best).
+best_rf15_plan_from_list([Plan1, Plan2 | Rest], Best) :-
+    \+ rf15_plan_better_or_equal(Plan1, Plan2),
+    best_rf15_plan_from_list([Plan2 | Rest], Best).
+
+rf15_plan_metrics(
+    rf15_no_hub_plan(_, _, _, _, _, _, Distance, Energy, ChargeStops, _),
+    ChargeStops, Energy, Distance, 1, 0
+).
+rf15_plan_metrics(
+    rf15_hub_plan(_, _, Collectors, _, _, _, _, _, _, TotalDistance, TotalEnergy, TotalChargeStops, _),
+    TotalChargeStops, TotalEnergy, TotalDistance, RobotCount, 1
+) :-
+    rf15_collector_robot_ids(Collectors, RobotIDs),
+    sort(RobotIDs, UniqueRobotIDs),
+    length(UniqueRobotIDs, RobotCount).
+
+rf15_collector_robot_ids([], []).
+rf15_collector_robot_ids([collector(RobotID, _, _, _, _, _, _, _, _, _, _) | Rest], [RobotID | RestIDs]) :-
+    rf15_collector_robot_ids(Rest, RestIDs).
+
+rf15_plan_better_or_equal(Plan1, Plan2) :-
+    rf15_plan_metrics(Plan1, Stops1, Energy1, Dist1, Robots1, TypeRank1),
+    rf15_plan_metrics(Plan2, Stops2, Energy2, Dist2, Robots2, TypeRank2),
+    ( Stops1 < Stops2 -> true
+    ; Stops1 =:= Stops2, Energy1 < Energy2 -> true
+    ; Stops1 =:= Stops2, Energy1 =:= Energy2, Dist1 < Dist2 -> true
+    ; Stops1 =:= Stops2, Energy1 =:= Energy2, Dist1 =:= Dist2, Robots1 < Robots2 -> true
+    ; Stops1 =:= Stops2, Energy1 =:= Energy2, Dist1 =:= Dist2, Robots1 =:= Robots2, TypeRank1 =< TypeRank2
+    ).
+
+rf15_print_plan(Plan) :-
+    Plan = rf15_no_hub_plan(_, _, _, _, _, _, _, _, _, _),
+    !,
+    rf15_print_no_hub_plan(Plan).
+rf15_print_plan(Plan) :-
+    rf15_print_hub_plan(Plan).
+
+rf15_print_no_hub_plan(
+    rf15_no_hub_plan(RobotID, SupplierLoads, SupplierVisitOrder, Destinations, DestVisitOrder,
+                     Path, Distance, Energy, ChargeStops, ChargePoints)
+) :-
+    nl,
+    write('--- RF15 FINAL RESULT ---'), nl,
+    write('RESULT: [YES] Grouped delivery can be executed by ONE robot without hub consolidation.'), nl,
+    format('Selected robot: Robot ~w~n', [RobotID]),
+    write('Supplier pickup loads:'), nl,
+    rf15_print_supplier_loads(SupplierLoads),
+    format('Supplier visit order: ~w~n', [SupplierVisitOrder]),
+    format('Destination visit order: ~w from requested destinations ~w~n', [DestVisitOrder, Destinations]),
+    format('Total route distance: ~w~n', [Distance]),
+    format('Total movement energy: ~2f~n', [Energy]),
+    format('Charging stops: ~w~n', [ChargeStops]),
+    write('Charging points used:'), nl,
+    print_charge_visit_details(ChargePoints),
+    nl,
+    write('Robot path:'), nl,
+    print_path(Path).
+
+rf15_print_hub_plan(
+    rf15_hub_plan(HubID, HubName, Collectors, FinalRobotID, Destinations, DestVisitOrder,
+                  FinalPath, FinalDistance, FinalEnergy,
+                  TotalDistance, TotalEnergy, TotalChargeStops, AllChargePoints)
+) :-
+    nl,
+    write('--- RF15 FINAL RESULT ---'), nl,
+    write('RESULT: [YES] Grouped delivery can be executed using hub consolidation.'), nl,
+    format('Consolidation hub: Node ~w (~w)~n', [HubID, HubName]),
+    write('Collector assignments:'), nl,
+    rf15_print_collectors(Collectors),
+    nl,
+    format('Final bulk delivery robot: Robot ~w~n', [FinalRobotID]),
+    format('Final destination visit order: ~w from requested destinations ~w~n', [DestVisitOrder, Destinations]),
+    format('Final route distance: ~w | Final route energy: ~2f~n', [FinalDistance, FinalEnergy]),
+    format('Total mission distance across all robots: ~w~n', [TotalDistance]),
+    format('Total movement energy across all robots: ~2f~n', [TotalEnergy]),
+    format('Total charging stops across plan: ~w~n', [TotalChargeStops]),
+    write('Charging points used:'), nl,
+    print_charge_visit_details(AllChargePoints),
+    nl,
+    write('Final robot path:'), nl,
+    print_path(FinalPath).
+
+rf15_print_collectors([]).
+rf15_print_collectors([collector(RobotID, SupplierIDs, SupplierVisitOrder, Products, Volume, Weight, Path, Distance, Energy, ChargeStops, ChargePoints) | Rest]) :-
+    format('  Robot ~w -> Supplier Nodes ~w -> Hub | Supplier visit order: ~w | Products: ~w | Load V/W: ~w/~w | Distance: ~w | Energy: ~2f | Charges: ~w~n',
+           [RobotID, SupplierIDs, SupplierVisitOrder, Products, Volume, Weight, Distance, Energy, ChargeStops]),
+    write('    Supplier details:'), nl,
+    rf15_print_supplier_id_details(SupplierIDs),
+    ( ChargePoints == [] -> true ; write('    Charging points: '), write(ChargePoints), nl ),
+    write('    Collector route:'), nl,
+    print_path_indented(Path, '      '),
+    rf15_print_collectors(Rest).
+
+rf15_print_supplier_id_details([]).
+rf15_print_supplier_id_details([SupplierID | Rest]) :-
+    ( supplier(SupplierID, SupplierName, SupplierProducts) ->
+        format('      Supplier Node ~w (~w) | Products sold: ~w~n', [SupplierID, SupplierName, SupplierProducts])
+    ;
+        format('      Supplier Node ~w~n', [SupplierID])
+    ),
+    rf15_print_supplier_id_details(Rest).
+
+print_path_indented([], _).
+print_path_indented([link(A, B, D, Type) | Rest], Indent) :-
+    format('~w~w -> ~w | Distance: ~w | Type: ~w~n', [Indent, A, B, D, Type]),
+    print_path_indented(Rest, Indent).
+
+
+% RF15 uses this non-greedy route builder instead of choosing the best leg
+% independently. That matters because a slightly longer leg that charges at a
+% hub/charge station can leave enough battery for the following leg.
+rf15_best_route_through_points_bounded(
+    RobotID, Start, Points, StartBattery,
+    BestPath, BestDistance, BestEnergy, BestFinalBattery, BestChargeStops, BestChargePoints
+) :-
+    findall(route_solution(Path, Distance, Energy, FinalBattery, ChargeStops, ChargePoints),
+        rf15_route_through_points_bounded(
+            RobotID, Start, Points, StartBattery,
+            Path, Distance, Energy, FinalBattery, ChargeStops, ChargePoints
+        ),
+        Routes),
+    Routes \= [],
+    best_rf15_route_solution_from_list(
+        Routes,
+        route_solution(BestPath, BestDistance, BestEnergy, BestFinalBattery, BestChargeStops, BestChargePoints)
+    ).
+
+rf15_route_through_points_bounded(_, _, [], Battery, [], 0, 0, Battery, 0, []).
+rf15_route_through_points_bounded(
+    RobotID, Current, [Next | Rest], BatteryIn,
+    FullPath, TotalDistance, TotalEnergy, FinalBattery, TotalChargeStops, ChargePoints
+) :-
+    route_leg_with_charging_bounded_option(
+        RobotID, Current, Next, BatteryIn,
+        LegPath, LegDistance, LegEnergy, BatteryAfterLeg, LegChargeStops, LegChargePoints
+    ),
+    rf15_route_through_points_bounded(
+        RobotID, Next, Rest, BatteryAfterLeg,
+        RestPath, RestDistance, RestEnergy, FinalBattery, RestChargeStops, RestChargePoints
+    ),
+    append(LegPath, RestPath, FullPath),
+    append(LegChargePoints, RestChargePoints, ChargePoints),
+    TotalDistance is LegDistance + RestDistance,
+    TotalEnergy is LegEnergy + RestEnergy,
+    TotalChargeStops is LegChargeStops + RestChargeStops.
+
+best_rf15_route_solution_from_list([Option], Option).
+best_rf15_route_solution_from_list(
+    [route_solution(Path1, Dist1, Energy1, Battery1, Stops1, Points1),
+     route_solution(_, Dist2, Energy2, _, Stops2, _) | Rest],
+    Best
+) :-
+    charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_rf15_route_solution_from_list([route_solution(Path1, Dist1, Energy1, Battery1, Stops1, Points1) | Rest], Best).
+best_rf15_route_solution_from_list(
+    [route_solution(_, Dist1, Energy1, _, Stops1, _),
+     route_solution(Path2, Dist2, Energy2, Battery2, Stops2, Points2) | Rest],
+    Best
+) :-
+    \+ charged_option_better_or_equal(Stops1, Energy1, Dist1, Stops2, Energy2, Dist2),
+    best_rf15_route_solution_from_list([route_solution(Path2, Dist2, Energy2, Battery2, Stops2, Points2) | Rest], Best).
 
 route_with_charging(RobotID, Start, End, BestChargeID, BestPath, BestDistance, BestEnergy) :-
     robot(RobotID, RobotType, _, _, _, MaxBat, Consumption),
@@ -1393,5 +2176,5 @@ handle_view_kb(_) :-
 
 
 start_system :-
-    start_server(8001),
+    %start_server(8001),
     menu.
