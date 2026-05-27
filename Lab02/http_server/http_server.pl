@@ -525,7 +525,7 @@ route_for_robot_handler(Request) :-
     ]),
 
     (
-        active_assignment(RobotID, OrderID, NodePath, LoadID)
+        active_assignment(RobotID, OrderID, _NodePath, LoadID)
     ->
         get_robot_status_or_default(RobotID, CurrentLocation, Battery, MissionStatus, _),
         sync_active_assignment_with_location(RobotID, CurrentLocation),

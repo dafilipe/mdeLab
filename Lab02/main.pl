@@ -1,3 +1,5 @@
+:- ensure_loaded('http_server/http_server.pl').
+
 % Knowledge base template
 :- dynamic node/2.
 :- dynamic robot/7.
@@ -2347,5 +2349,5 @@ handle_view_kb(_) :-
 
 
 start_system :-
-    %start_server(8001),
+    start_server(8001),
     menu.
