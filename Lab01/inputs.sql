@@ -1,5 +1,5 @@
 USE voltWay_db;
-
+SET SQL_SAFE_UPDATES = 0;
 -- =========================
 -- PRICING
 -- =========================
@@ -44,18 +44,18 @@ INSERT INTO car VALUES
 -- STATIONS 
 -- =========================
 INSERT INTO station (city, address, gps, state) VALUES
-('Lisboa', 'Av. Liberdade', '38.72,-9.13', 'active'),
-('Porto', 'Rua Santa Catarina', '41.15,-8.61', 'active'),
-('Coimbra', 'Praça da República', '40.21,-8.42', 'active'),
-('Faro', 'Centro', '37.01,-7.93', 'maintenance'),
-('Braga', 'Av. Central', '41.55,-8.42', 'active');
+('Lisboa', 'Av. Liberdade', '38.72,-9.13', 'available'),
+('Porto', 'Rua Santa Catarina', '41.15,-8.61', 'available'),
+('Coimbra', 'Praça da República', '40.21,-8.42', 'available'),
+('Faro', 'Centro', '37.01,-7.93', 'available'),
+('Braga', 'Av. Central', '41.55,-8.42', 'available');
 
 -- =========================
 -- CHARGERS 
 -- =========================
 INSERT INTO charger (id_station, max_power, state) VALUES
 (1, 50, 'available'),
-(1, 22, 'occupied'),
+(1, 22, 'available'),
 (2, 100, 'available'),
 (2, 50, 'available'),
 (3, 22, 'available'),
@@ -164,20 +164,261 @@ INSERT INTO tecnicalDepartment (nome, telefone, email, local_area, estado) VALUE
 -- Lisboa
 ('João Silva', 912345678, 'joao.silva@email.com', 'Lisboa', 'disponivel'),
 
-('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'ocupado'),
+('Ana Costa', 913456789, 'ana.costa@email.com', 'Lisboa', 'disponivel'),
 
 -- Porto
 ('Rui Pereira', 914567890, 'rui.pereira@email.com', 'Porto', 'disponivel'),
 ('Marta Lopes', 915678901, 'marta.lopes@email.com', 'Porto', 'indisponivel'),
 
 -- Coimbra
-('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'ocupado'),
+('Pedro Gomes', 916789012, 'pedro.gomes@email.com', 'Coimbra', 'disponivel'),
 ('Josefino Esdrubal', 912675967, 'Josefino.Esdrubal@email.com', 'Coimbra', 'Disponivel'),
 
 -- Faro
 ('Sofia Almeida', 917890123, 'sofia.almeida@email.com', 'Faro', 'disponivel'),
 
 -- Braga
-('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'ocupado'),
+('Tiago Fernandes', 918901234, 'tiago.fernandes@email.com', 'Braga', 'disponivel'),
 ('Carla Ribeiro', 919012345, 'carla.ribeiro@email.com', 'Braga', 'disponivel');
 
+-- Criar View do RF6
+CREATE VIEW view_sensor_meas1 AS
+SELECT
+    sm.id_measurement AS ID_Medida,
+    s.id_sensor AS Sensor,
+    c.id_charger AS Carregador,
+    c.id_station AS Estacao,
+    s.sens_type AS Tipo,
+    sm.measured_value AS Medida,
+    sm.date_time AS Data_Hora
+FROM sensor_measurement sm
+JOIN sensor s
+    ON sm.id_sensor = s.id_sensor
+JOIN charger c
+    ON s.id_charger = c.id_charger
+JOIN station se
+    ON c.id_station = se.id_station;
+    
+-- Criar tabela para rf78
+
+CREATE TABLE alert (
+    id_alert INT NOT NULL AUTO_INCREMENT,
+    id_session INT NOT NULL,
+    energy_value DECIMAL(10,2) NOT NULL,
+    threshold_value DECIMAL(10,2) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_alert),
+    CONSTRAINT fk_alert_session
+        FOREIGN KEY (id_session) REFERENCES charging_session(id_session)
+);
+
+-- Criar trigger de rf7
+
+DELIMITER $$
+CREATE TRIGGER trg_high_energy_alert
+AFTER update ON charging_session
+FOR EACH ROW
+BEGIN
+    DECLARE energy_limit DECIMAL(10,2) DEFAULT 50.00;
+
+    IF NEW.cons_energy > energy_limit THEN
+        INSERT INTO alert (
+            id_session,
+            energy_value,
+            threshold_value,
+            created_at)
+        VALUES (
+            NEW.id_session,
+            NEW.cons_energy,
+            energy_limit,
+            NOW());
+    END IF;
+END$$
+DELIMITER ;
+
+-- criar trigger rf8
+DELIMITER $$
+
+CREATE TRIGGER trg_create_receipt_after_session_update
+AFTER UPDATE ON charging_session
+FOR EACH ROW
+BEGIN
+    DECLARE v_id_user INT;
+    DECLARE v_total_amount DECIMAL(10,2);
+
+    IF OLD.fin_time IS NULL
+       AND NEW.fin_time IS NOT NULL
+       AND NOT EXISTS (
+           SELECT 1
+           FROM receipt r
+           WHERE r.id_session = NEW.id_session
+       ) THEN
+
+        -- obter o utilizador dono do carro
+        SELECT c.id_user
+        INTO v_id_user
+        FROM car c
+        WHERE c.plate = NEW.plate
+        LIMIT 1;
+
+        IF v_id_user IS NOT NULL THEN
+
+            -- calcular valor da fatura
+            SELECT NEW.cons_energy * p.price_per_hour
+            INTO v_total_amount
+            FROM user u
+            JOIN pricing p ON u.type = p.type
+            WHERE u.id_user = v_id_user
+            LIMIT 1;
+
+            INSERT INTO receipt (
+                plate,
+                id_user,
+                id_session,
+                emission_date,
+                total_amount,
+                state
+            )
+            VALUES (
+                NEW.plate,
+                v_id_user,
+                NEW.id_session,
+                NEW.fin_time,
+                v_total_amount,
+                'issued'
+            );
+        END IF;
+
+    END IF;
+END$$
+
+DELIMITER ;
+
+-- RF12
+
+DELIMITER $$
+
+CREATE PROCEDURE atribuir_tecnico_manutencao(IN p_id_charger INT)
+BEGIN
+    DECLARE v_id_station INT DEFAULT NULL;
+    DECLARE v_city VARCHAR(45) DEFAULT NULL;
+    DECLARE v_id_tecnico INT DEFAULT NULL;
+
+    -- obter id da station associada ao charger
+    SELECT id_station
+    INTO v_id_station
+    FROM charger
+    WHERE id_charger = p_id_charger
+    LIMIT 1;
+
+    IF v_id_station IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Charger não encontrado.';
+    END IF;
+
+    -- obter cidade da station
+    SELECT city
+    INTO v_city
+    FROM station
+    WHERE id_station = v_id_station
+    LIMIT 1;
+
+    IF v_city IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Station associada não encontrada.';
+    END IF;
+
+    -- alterar estado do posto para maintenance
+    UPDATE station
+    SET state = 'maintenance'
+    WHERE id_station = v_id_station;
+
+    -- procurar técnico disponível obrigatoriamente da mesma cidade
+    SELECT id_tecnico
+    INTO v_id_tecnico
+    FROM tecnicalDepartment
+    WHERE local_area = v_city
+      AND estado = 'disponivel'
+    ORDER BY id_tecnico
+    LIMIT 1;
+
+    IF v_id_tecnico IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Não existe técnico disponível nessa cidade.';
+    END IF;
+
+    -- atribuir técnico ao posto e mudar estado para ocupado
+    UPDATE tecnicalDepartment
+    SET estado = 'ocupado',
+        posto_atribuido = v_id_station
+    WHERE id_tecnico = v_id_tecnico;
+
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_charger_manutencao
+AFTER UPDATE ON charger
+FOR EACH ROW
+BEGIN
+    IF NEW.state = 'maintenance' AND OLD.state <> 'maintenance' THEN
+        CALL atribuir_tecnico_manutencao(NEW.id_charger);
+    END IF;
+END$$
+
+DELIMITER ;
+
+DELIMITER $$
+CREATE PROCEDURE libertar_tecnico_manutencao(IN p_id_charger INT)
+BEGIN
+    DECLARE v_id_station INT DEFAULT NULL;
+
+    -- obter a station associada ao charger
+    SELECT id_station
+    INTO v_id_station
+    FROM charger
+    WHERE id_charger = p_id_charger
+    LIMIT 1;
+	
+	SELECT id_station
+    INTO v_id_station
+    FROM charger
+    WHERE id_charger = p_id_charger
+    LIMIT 1;
+
+    IF v_id_station IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Charger não encontrado.';
+    END IF;
+    
+    -- alterar estado do posto para maintenance
+    UPDATE station
+    SET state = 'available'
+    WHERE id_station = v_id_station;
+    IF v_id_station IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Charger não encontrado.';
+    END IF;
+
+    -- libertar técnico(s) associado(s) a essa station
+    UPDATE tecnicalDepartment
+    SET estado = 'disponivel',
+        posto_atribuido = NULL
+    WHERE posto_atribuido = v_id_station;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER trg_charger_sai_manutencao
+AFTER UPDATE ON charger
+FOR EACH ROW
+BEGIN
+    IF OLD.state = 'maintenance'
+       AND NEW.state IN ('available', 'occupied') THEN
+        CALL libertar_tecnico_manutencao(NEW.id_charger);
+    END IF;
+END$$
+
+DELIMITER ;

@@ -2,11 +2,14 @@
 drop table tecnicalDepartment;
 
 -- RF10
-	select * FROM tecnicalDepartment where local_area = "Coimbra";
+select * FROM tecnicalDepartment where local_area = "Coimbra";
 select * FROM tecnicalDepartment;
 -- RF11
-SELECT local_area, count(*) as total_area 
-from tecnicalDepartment group by local_area;
+SELECT local_area AS Cidade,
+	count(*) AS Tecnicos 
+from tecnicalDepartment
+group by local_area
+Order by Tecnicos DESC;
 
 -- RF12
 
