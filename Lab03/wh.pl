@@ -2,6 +2,7 @@
 :- ['ac.pl'].
 
 model_wh :-
+    model_ac,
     def_warehouse,
     def_sensor,
     def_sensors,
@@ -382,5 +383,23 @@ alarm_message(occupancy_low, occupancy_below_expected_range).
 alarm_message(stock_unavailable, insufficient_stock_available).
 alarm_message(door_open, door_is_open).
 alarm_message(door_closed, door_is_closed).
+alarm_message(humidity_high, humidity_above_safe_range).
+alarm_message(humidity_low, humidity_below_safe_range).
+alarm_message(co2_high, co2_above_safe_range).
 
 alarm_message(_, generic_alarm).
+
+show_general_alarms :-
+    get_value(alarmG, count, Total),
+    write('Total general alarms: '), write(Total), nl,
+    show_general_alarms_from(Total).
+
+show_general_alarms_from(0) :-
+    !.
+
+show_general_alarms_from(N) :-
+    N > 0,
+    atom_concat(alarmG, N, AlarmFrame),
+    (frame_exists(AlarmFrame) -> show_frame(AlarmFrame) ; true),
+    N1 is N - 1,
+    show_general_alarms_from(N1).
