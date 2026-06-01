@@ -7,6 +7,7 @@ model_wh :-
     def_sensors,
     def_actuator,
     def_actuators,
+    def_general_alarm,
     def_sensor_demons,
     def_product,
     def_order.
@@ -105,12 +106,16 @@ update_cooling(T, Ls) :-
 
 humidity_control(_F, _S, Humidity, Humidity) :-
     Humidity > 70,
-    new_value(humidifier, state, off).
-    %new_value(ventilation, state, on).
+    new_value(humidifier, state, off),
+    %new_value(ventilation, state, on),
+    getdate(D),
+    genmsg_general(sensor_humidity, humidity_high, Humidity, warning, D).
 
 humidity_control(_F, _S, Humidity, Humidity) :-
     Humidity < 40,
-    new_value(humidifier, state, on).
+    new_value(humidifier, state, on),
+    getdate(D),
+    genmsg_general(sensor_humidity, humidity_low, Humidity, warning, D).
 
 humidity_control(_F, _S, Humidity, Humidity) :-
     Humidity >= 40,
@@ -124,7 +129,9 @@ humidity_control(_F, _S, Humidity, Humidity) :-
 
 co2_control(_F, _S, CO2, CO2) :-
     CO2 > 900,
-    new_value(ventilation, state, on).
+    new_value(ventilation, state, on),
+    getdate(D),
+    genmsg_general(sensor_co2, co2_high, CO2, warning, D).
 
 co2_control(_F, _S, CO2, CO2) :-
     CO2 =< 900,
@@ -141,13 +148,13 @@ occupancy_control(_F, _S, People, People) :-
     People > 13,
     adapt_limits(-2),
     getdate(D),
-    genmsg(People, occupancy_high, D).
+    genmsg_general(sensor_presence, occupancy_high, People, warning, D).
 
 occupancy_control(_F, _S, People, People) :-
     People < 7,
     adapt_limits(2),
     getdate(D),
-    genmsg(People, occupancy_low, D).
+    genmsg_general(sensor_presence, occupancy_low, People, warning, D).
 
 occupancy_control(_F, _S, People, People) :-
     People >= 7,
@@ -175,13 +182,20 @@ adapt_limits(Z) :-
 % -------------------------
 
 door_control(_F, _S, DoorState, DoorState) :-
-    update_doors(DoorState).
+    update_doors(DoorState),
+    door_alarm(DoorState).
 
 update_doors(open) :-
     new_value(automatic_doors, state, open).
 
 update_doors(closed) :-
     new_value(automatic_doors, state, closed).
+
+door_alarm(open) :-
+    getdate(D),
+    genmsg_general(sensor_door, door_open, open, info, D).
+
+door_alarm(closed).
 
 % =========================
 % Actuator
@@ -272,5 +286,101 @@ def_order :-
     new_slot(order, order_state).
 
 % =========================
-% misc
+% Order creation
 % =========================
+
+create_order(OrderFrame, ProductFrame, Quantity) :-
+    Quantity > 0,
+    get_value(ProductFrame, quantity, Stock),
+    Stock >= Quantity,
+
+    get_value(ProductFrame, unit_price, UnitPrice),
+    Price is Quantity * UnitPrice,
+    NewStock is Stock - Quantity,
+
+    new_value(ProductFrame, quantity, NewStock),
+
+    new_frame(OrderFrame),
+    new_slot(OrderFrame, is_a, order),
+    new_value(OrderFrame, reference, OrderFrame),
+    new_value(OrderFrame, included_products, ProductFrame),
+    new_value(OrderFrame, quantity, Quantity),
+    new_value(OrderFrame, price, Price),
+    new_value(OrderFrame, order_state, pending).
+
+create_order(_OrderFrame, ProductFrame, Quantity) :-
+    Quantity > 0,
+    get_value(ProductFrame, quantity, Stock),
+    Stock < Quantity,
+
+    getdate(D),
+    genmsg_general(stock_system, stock_unavailable, Quantity, warning, D).
+
+% =========================
+% Order state update
+% =========================
+
+valid_order_state(pending).
+valid_order_state(preparing).
+valid_order_state(shipped).
+valid_order_state(delivered).
+
+update_order_state(OrderFrame, NewState) :-
+    valid_order_state(NewState),
+    new_value(OrderFrame, order_state, NewState).
+
+% =========================
+% GENERAL ALARM DEFINITION
+% =========================
+
+def_general_alarm :-
+    new_frame(alarmG),
+    new_slot(alarmG, event),
+    new_slot(alarmG, source),
+    new_slot(alarmG, value),
+    new_slot(alarmG, severity),
+    new_slot(alarmG, message),
+    new_slot(alarmG, date),
+    new_slot(alarmG, count, 0).
+
+genmsg_general(Source, Event, Value, Severity, Date) :-
+    genname_general(N),
+    new_frame(N),
+    new_slot(N, is_a, alarmG),
+
+    new_value(N, event, Event),
+    new_value(N, source, Source),
+    new_value(N, value, Value),
+    new_value(N, severity, Severity),
+
+    alarm_message(Event, Message),
+    new_value(N, message, Message),
+
+    new_value(N, date, Date),
+
+    activate_alarm_system.
+
+genname_general(N) :-
+    get_value(alarmG, count, A),
+    A1 is A + 1,
+    new_value(alarmG, count, A1),
+    atom_concat(alarmG, A1, N).
+
+activate_alarm_system :-
+    frame_exists(alarm_system),
+    new_value(alarm_system, state, on).
+activate_alarm_system.
+
+% =========================
+% ALARM MESSAGES
+% =========================
+
+alarm_message(burning, temperature_above_absolute_upper_limit).
+alarm_message(freezing, temperature_below_absolute_lower_limit).
+alarm_message(occupancy_high, occupancy_above_expected_range).
+alarm_message(occupancy_low, occupancy_below_expected_range).
+alarm_message(stock_unavailable, insufficient_stock_available).
+alarm_message(door_open, door_is_open).
+alarm_message(door_closed, door_is_closed).
+
+alarm_message(_, generic_alarm).
