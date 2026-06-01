@@ -1,3 +1,6 @@
+:- ['golog2_2026.pl'].
+
+
 model_ac :-
     def_ac,
     def_thermo,

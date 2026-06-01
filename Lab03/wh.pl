@@ -1,10 +1,12 @@
+:- ['golog2_2026.pl'].
+
 model_wh :-
-    def_isa,
     def_warehouse,
     def_sensor,
     def_sensors,
     def_actuator,
     def_actuators,
+    def_sensor_demons,
     def_product,
     def_order.
 
@@ -43,6 +45,70 @@ def_sensors :-
     % to-do 
     % new_frame(sensor_presence)
     % new_frame(sensor_door)
+
+% -------------------------
+% Sensors Demons
+% -------------------------
+
+def_sensor_demons :-
+    % Demon to activate cooling attached to temperature sensor
+    new_demon(sensor_temp, current_value, temp_control, if_write, after, side_effect),
+
+    % Demon for humidification
+    new_demon(sensor_humidity, current_value, humidity_control, if_write, after, side_effect),
+
+    % Demon for CO2 ventilation
+    new_demon(sensor_co2, current_value, co2_control, if_write, after, side_effect).
+
+
+% -------------------------
+% Temperature demon
+% -------------------------
+
+temp_control(_F, _S, T, T) :-
+    get_value(thermo, ls, Ls),
+    update_cooling(T, Ls).
+
+
+update_cooling(T, Ls) :-
+    T > Ls,
+    new_value(cooling_system, state, on).
+
+update_cooling(T, Ls) :-
+    T =< Ls,
+    new_value(cooling_system, state, off).
+
+
+% -------------------------
+% Humidity demon
+% -------------------------
+
+humidity_control(_F, _S, Humidity, Humidity) :-
+    Humidity > 70,
+    new_value(humidifier, state, off).
+    %new_value(ventilation, state, on).
+
+humidity_control(_F, _S, Humidity, Humidity) :-
+    Humidity < 40,
+    new_value(humidifier, state, on).
+
+humidity_control(_F, _S, Humidity, Humidity) :-
+    Humidity >= 40,
+    Humidity =< 70,
+    new_value(humidifier, state, off).
+
+
+% -------------------------
+% CO2 demon
+% -------------------------
+
+co2_control(_F, _S, CO2, CO2) :-
+    CO2 > 900,
+    new_value(ventilation, state, on).
+
+co2_control(_F, _S, CO2, CO2) :-
+    CO2 =< 900,
+    new_value(ventilation, state, off).
 
 % =========================
 % Actuator
