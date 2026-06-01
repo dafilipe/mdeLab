@@ -53,11 +53,12 @@ def_sensors :-
     new_frame(sensor_presence),
     new_slot(sensor_presence, is_a, sensor),
     new_value(sensor_presence, type, presence),
-    new_value(sensor_presence, current_value, 0).
+    new_value(sensor_presence, current_value, 0),
 
-    % to-do 
-    % new_frame(sensor_presence)
-    % new_frame(sensor_door)
+    new_frame(sensor_door),
+    new_slot(sensor_door, is_a, sensor),
+    new_value(sensor_door, type, door_sensor),
+    new_value(sensor_door, current_value, closed).
 
 % -------------------------
 % Sensors Demons
@@ -74,7 +75,10 @@ def_sensor_demons :-
     new_demon(sensor_co2, current_value, co2_control, if_write, after, side_effect),
 
     % Demon for adaptive climate control
-    new_demon(sensor_presence, current_value, occupancy_control, if_write, after, side_effect).
+    new_demon(sensor_presence, current_value, occupancy_control, if_write, after, side_effect),
+
+    % Demon for for door control
+    new_demon(sensor_door, current_value, door_control, if_write, after, side_effect).
 
 
 % -------------------------
@@ -166,6 +170,19 @@ adapt_limits(Z) :-
     new_value(thermo, lai, NewLai),
     new_value(thermo, las, NewLas).
 
+% -------------------------
+% Door demon
+% -------------------------
+
+door_control(_F, _S, DoorState, DoorState) :-
+    update_doors(DoorState).
+
+update_doors(open) :-
+    new_value(automatic_doors, state, open).
+
+update_doors(closed) :-
+    new_value(automatic_doors, state, closed).
+
 % =========================
 % Actuator
 % =========================
@@ -189,11 +206,17 @@ def_actuators :-
     new_frame(humidifier),
     new_slot(humidifier,is_a, actuator),
     new_value(humidifier, type, humidifier),
-    new_value(humidifier, state, off).
+    new_value(humidifier, state, off),
 
-    % to-do 
-    % new_frame(alarm_system)
-    % new_frame(automatic_doors)
+    new_frame(alarm_system),
+    new_slot(alarm_system, is_a, actuator),
+    new_value(alarm_system, type, alarm),
+    new_value(alarm_system, state, off),
+
+    new_frame(automatic_doors),
+    new_slot(automatic_doors, is_a, actuator),
+    new_value(automatic_doors, type, doors),
+    new_value(automatic_doors, state, closed).
 
 % =========================
 % Product
@@ -208,6 +231,34 @@ def_product :-
     new_slot(product, ideal_temperature),
     new_slot(product, warehouse_location),
     new_slot(product, unit_price).
+
+% =========================
+% Product creation
+% =========================
+
+create_product(ProductFrame, Name, Reference, Category, Quantity, ExpirationDate, IdealTemp, WarehouseLocation, UnitPrice) :-
+    Quantity >= 0,
+    UnitPrice >= 0,
+
+    new_frame(ProductFrame),
+    new_slot(ProductFrame, is_a, product),
+
+    new_value(ProductFrame, name, Name),
+    new_value(ProductFrame, reference, Reference),
+    new_value(ProductFrame, category, Category),
+    new_value(ProductFrame, quantity, Quantity),
+    new_value(ProductFrame, expiration_date, ExpirationDate),
+    new_value(ProductFrame, ideal_temperature, IdealTemp),
+    new_value(ProductFrame, warehouse_location, WarehouseLocation),
+    new_value(ProductFrame, unit_price, UnitPrice).
+
+% =========================
+% Stock update
+% =========================
+
+update_stock(ProductFrame, NewQuantity) :-
+    NewQuantity >= 0,
+    new_value(ProductFrame, quantity, NewQuantity).
 
 % =========================
 % Order
