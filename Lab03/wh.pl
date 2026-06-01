@@ -13,7 +13,14 @@ model_wh :-
 % =========================
 % WhareHouse
 % =========================
-def_warehouse.
+def_warehouse :-
+    new_frame(warehouse),
+    new_slot(warehouse, name),
+    new_slot(warehouse, location),
+    new_slot(warehouse, capacity),
+    new_slot(warehouse, zones),
+    new_slot(warehouse, current_temperature),
+    new_slot(warehouse, operational_state).
 
 % =========================
 % Sensors
@@ -142,12 +149,27 @@ def_actuators :-
 % =========================
 % Product
 % =========================
-def_product.
+def_product :-
+    new_frame(product),
+    new_slot(product, name),
+    new_slot(product, reference),
+    new_slot(product, category),
+    new_slot(product, quantity),
+    new_slot(product, expiration_date),
+    new_slot(product, ideal_temperature),
+    new_slot(product, warehouse_location),
+    new_slot(product, unit_price).
 
 % =========================
 % Order
 % =========================
-def_order.
+def_order :-
+    new_frame(order),
+    new_slot(order, reference),
+    new_slot(order, included_products),
+    new_slot(order, quantity),
+    new_slot(order, price),
+    new_slot(order, order_state).
 
 % =========================
 % misc
