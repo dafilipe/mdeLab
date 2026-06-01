@@ -1,3 +1,8 @@
+model_ac :-
+    def_ac,
+    def_thermo,
+    def_alarm.
+
 % =========================
 % AIR CONDITIONING
 % =========================
@@ -33,7 +38,7 @@ coolf(F) :-
 def_readtd :-
     new_demon(ac, temp, readtd, if_read, after, alter_value).
 
-readtd(F, S, _, T) :-
+readtd(_F, _S, _, T) :-
     get_value(thermo, temp, T).
 
 
@@ -101,7 +106,7 @@ def_controld :-
     new_demon(thermo, temp, controld, if_write, before, side_effect).
 
 
-controld(F, _S, T) :-
+controld(F, _S, T, T) :-
     get_value(F, li, Li),
     get_value(F, lai, Lai),
     get_value(F, ls, Ls),
@@ -113,10 +118,10 @@ controld(F, _S, T) :-
 % AÇÕES DO CONTROLADOR
 % =========================
 
-act(T, _Li, _Lai, Ls, Las) :-
+act(T, Li, Lai, Ls, Las) :-
     T > Ls,
     call_method_0(ac, cool),
-    malarm(T, _Li, _Lai, Ls, Las).
+    malarm(T, Li, Lai, Ls, Las).
 
 act(T, Li, Lai, Ls, Las) :-
     T < Li,
@@ -145,6 +150,20 @@ malarm(T, _Li, Lai, _Ls, _Las) :-
 
 malarm(_T, _Li, _Lai, _Ls, _Las).
 
+genmsg(T, E, D) :-
+    genname(N),
+    new_frame(N),
+    new_slot(N, is_a, alarm),
+    new_value(N, event, E),
+    new_value(N, temp, T),
+    new_value(N, date, D).
+
+genname(N) :-
+    get_value(alarm, count, A),
+    A1 is A + 1,
+    new_value(alarm, count, A1),
+    atom_concat(alarm, A1, N).
+
 
 % =========================
 % DATA
@@ -153,3 +172,18 @@ malarm(_T, _Li, _Lai, _Ls, _Las).
 getdate(D) :-
     get_time(T),
     stamp_date_time(T, D, 'UTC').
+
+% =========================
+% DEFINICAO ALARME
+% =========================
+
+def_alarm :-
+    new_frame(alarm),
+    new_slot(alarm, event),
+    new_slot(alarm, temp),
+    new_slot(alarm, date),
+    new_slot(alarm, count, 0),
+    def_isa.
+
+def_isa :-
+    new_relation(is_a, transitive, all, nil).
