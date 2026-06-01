@@ -1,4 +1,5 @@
 :- ['golog2_2026.pl'].
+:- ['ac.pl'].
 
 model_wh :-
     def_warehouse,
@@ -47,7 +48,12 @@ def_sensors :-
     new_frame(sensor_co2),
     new_slot(sensor_co2, is_a, sensor),
     new_value(sensor_co2, type, co2),
-    new_value(sensor_co2, current_value, 400). % idk what value to put
+    new_value(sensor_co2, current_value, 400), % 400 ppm = good. 1000 ppm = very bad
+
+    new_frame(sensor_presence),
+    new_slot(sensor_presence, is_a, sensor),
+    new_value(sensor_presence, type, presence),
+    new_value(sensor_presence, current_value, 0).
 
     % to-do 
     % new_frame(sensor_presence)
@@ -65,7 +71,10 @@ def_sensor_demons :-
     new_demon(sensor_humidity, current_value, humidity_control, if_write, after, side_effect),
 
     % Demon for CO2 ventilation
-    new_demon(sensor_co2, current_value, co2_control, if_write, after, side_effect).
+    new_demon(sensor_co2, current_value, co2_control, if_write, after, side_effect),
+
+    % Demon for adaptive climate control
+    new_demon(sensor_presence, current_value, occupancy_control, if_write, after, side_effect).
 
 
 % -------------------------
@@ -116,6 +125,46 @@ co2_control(_F, _S, CO2, CO2) :-
 co2_control(_F, _S, CO2, CO2) :-
     CO2 =< 900,
     new_value(ventilation, state, off).
+
+% -------------------------
+% Occupancy demon 
+% X = 10 (expected amount of people)
+% Y = 3  (tolerance)
+% Z = 2  (degrees to adapt)
+% -------------------------
+
+occupancy_control(_F, _S, People, People) :-
+    People > 13,
+    adapt_limits(-2),
+    getdate(D),
+    genmsg(People, occupancy_high, D).
+
+occupancy_control(_F, _S, People, People) :-
+    People < 7,
+    adapt_limits(2),
+    getdate(D),
+    genmsg(People, occupancy_low, D).
+
+occupancy_control(_F, _S, People, People) :-
+    People >= 7,
+    People =< 13,
+    adapt_limits(0).
+
+% helper
+base_limits(14, 0, 25, 35).
+
+adapt_limits(Z) :-
+    base_limits(BaseLi, BaseLai, BaseLs, BaseLas),
+
+    NewLi is BaseLi + Z,
+    NewLai is BaseLai + Z,
+    NewLs is BaseLs + Z,
+    NewLas is BaseLas + Z,
+
+    new_value(thermo, li, NewLi),
+    new_value(thermo, ls, NewLs),
+    new_value(thermo, lai, NewLai),
+    new_value(thermo, las, NewLas).
 
 % =========================
 % Actuator
