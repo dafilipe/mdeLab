@@ -88,6 +88,9 @@ def_sensor_demons :-
 % -------------------------
 
 temp_control(_F, _S, T, T) :-
+    new_value(thermo, temp, T),
+    new_value(warehouse, current_temperature, T),   
+
     get_value(thermo, ls, Ls),
     update_cooling(T, Ls).
 
