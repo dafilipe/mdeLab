@@ -37,7 +37,8 @@ main_option(6) :- climate_menu.
 main_option(7) :- occupancy_menu.
 main_option(8) :- alarm_menu.
 main_option(0) :- write('Exiting menu...'), nl.
-main_option(_) :- write('Invalid option.'), nl.
+
+
 
 
 % =========================
@@ -119,8 +120,7 @@ warehouse_option(5) :-
 warehouse_option(0) :-
     write('Back to main menu.'), nl.
 
-warehouse_option(_) :-
-    write('Invalid option.'), nl.
+
 
 
 % =========================
@@ -185,8 +185,7 @@ sensor_actuator_option(8) :-
 sensor_actuator_option(0) :-
     write('Back to main menu.'), nl.
 
-sensor_actuator_option(_) :-
-    write('Invalid option.'), nl.
+
 
 
 % =========================
@@ -244,8 +243,7 @@ product_option(4) :-
 product_option(0) :-
     write('Back to main menu.'), nl.
 
-product_option(_) :-
-    write('Invalid option.'), nl.
+
 
 
 % =========================
@@ -276,8 +274,7 @@ order_creation_option(2) :-
 order_creation_option(0) :-
     write('Back to main menu.'), nl.
 
-order_creation_option(_) :-
-    write('Invalid option.'), nl.
+
 
 
 % =========================
@@ -311,8 +308,8 @@ order_state_option(3) :-
 order_state_option(0) :-
     write('Back to main menu.'), nl.
 
-order_state_option(_) :-
-    write('Invalid option.'), nl.
+
+
 
 
 % =========================
@@ -363,9 +360,6 @@ climate_option(6) :-
 climate_option(0) :-
     write('Back to main menu.'), nl.
 
-climate_option(_) :-
-    write('Invalid option.'), nl.
-
 
 visualize_climate_system :-
     nl,
@@ -412,8 +406,8 @@ occupancy_option(2) :-
 occupancy_option(0) :-
     write('Back to main menu.'), nl.
 
-occupancy_option(_) :-
-    write('Invalid option.'), nl.
+
+
 
 
 % =========================
@@ -450,5 +444,3 @@ alarm_option(3) :-
 alarm_option(0) :-
     write('Back to main menu.'), nl.
 
-alarm_option(_) :-
-    write('Invalid option.'), nl.
