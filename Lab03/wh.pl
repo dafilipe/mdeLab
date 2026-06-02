@@ -1,6 +1,7 @@
 :- ['golog2_2026.pl'].
 
 model_wh :-
+    def_isa,
     def_warehouse,
     def_sensor,
     def_sensors,
@@ -233,14 +234,13 @@ eval_climate_states(_T, _Lai, _Li, _Ls, _Las) :-
 % -------------------------
 
 humidity_control(_F, _S, Humidity, Humidity) :-
-    Humidity > 70,
+    Humidity > 70, !,
     new_value(humidifier, state, off),
-    %new_value(ventilation, state, on),
     getdate(D),
     genmsg_general(sensor_humidity, humidity_high, Humidity, warning, D).
 
 humidity_control(_F, _S, Humidity, Humidity) :-
-    Humidity < 40,
+    Humidity < 40, !,
     new_value(humidifier, state, on),
     getdate(D),
     genmsg_general(sensor_humidity, humidity_low, Humidity, warning, D).
@@ -256,7 +256,7 @@ humidity_control(_F, _S, Humidity, Humidity) :-
 % -------------------------
 
 co2_control(_F, _S, CO2, CO2) :-
-    CO2 > 900,
+    CO2 > 900, !,
     new_value(ventilation, state, on),
     getdate(D),
     genmsg_general(sensor_co2, co2_high, CO2, warning, D).
@@ -410,11 +410,13 @@ def_product :-
     new_slot(product, unit_price).
 
 
+create_product(ProductFrame, _, _, _, _, _, _, _, _) :-
+    frame_exists(ProductFrame), !,
+    write( 'Product [' ), write(ProductFrame), write( '] already exists' ), nl.
+
 create_product(ProductFrame, Name, Reference, Category, Quantity, ExpirationDate, IdealTemp, WarehouseLocation, UnitPrice) :-
     Quantity >= 0,
-    UnitPrice >= 0,
-
-    \+ frame_exists(ProductFrame), !,
+    UnitPrice >= 0, !,
 
     new_frame(ProductFrame),
     new_slot(ProductFrame, is_a, product),
@@ -429,8 +431,9 @@ create_product(ProductFrame, Name, Reference, Category, Quantity, ExpirationDate
     new_value(ProductFrame, unit_price, UnitPrice),
     write( 'Product [' ), write(ProductFrame), write( '] created' ), nl.
 
-create_product(ProductFrame, _, _, _, _, _, _, _, _) :-
-    write( 'Product [' ), write(ProductFrame), write( '] already exists' ), nl.
+create_product(ProductFrame, _, _, _, Quantity, _, _, _, UnitPrice) :-
+    write( 'Product [' ), write(ProductFrame), write( '] failed: invalid quantity or unit price (' ),
+    write(Quantity), write(', '), write(UnitPrice), write( ')' ), nl.
 
 
 visualize_product(Id) :-
@@ -441,14 +444,18 @@ visualize_product(Id) :-
     write( 'Product [' ), write(Id), write( '] not found' ), nl.
 
 
+update_product_stock(Id, _) :-
+    \+ frame_exists(Id), !,
+    write( 'Product [' ), write(Id), write( '] not found' ), nl.
+
 update_product_stock(Id, NewQuantity) :-
-    NewQuantity >= 0,
-    frame_exists(Id), !,
+    NewQuantity >= 0, !,
     new_value(Id, quantity, NewQuantity),
     write( 'Product [' ), write(Id), write( '] stock changed to ' ), write(NewQuantity), nl.
 
-update_product_stock(Id, _) :-
-    write( 'Product [' ), write(Id), write( '] not found' ), nl.
+update_product_stock(Id, NewQuantity) :-
+    write( 'Product [' ), write(Id), write( '] failed: invalid quantity (' ),
+    write(NewQuantity), write( ')' ), nl.
 
 
 delete_product(Id) :-
@@ -471,12 +478,49 @@ def_order :-
     new_slot(order, order_state).
 
 
-create_order(OrderFrame, ProductFrame, Quantity) :-
-    Quantity > 0,
-    get_value(ProductFrame, quantity, Stock),
-    Stock >= Quantity, !,
+valid_order_quantity(Quantity) :-
+    number(Quantity),
+    Quantity > 0.
 
+valid_product_for_order(ProductFrame) :-
+    frame_exists(ProductFrame),
+    get_value(ProductFrame, is_a, product),
+    get_value(ProductFrame, quantity, Stock),
+    number(Stock),
     get_value(ProductFrame, unit_price, UnitPrice),
+    number(UnitPrice).
+
+valid_order_frame(OrderFrame) :-
+    frame_exists(OrderFrame),
+    get_value(OrderFrame, is_a, order).
+
+
+create_order(OrderFrame, _, _) :-
+    frame_exists(OrderFrame), !,
+    write( 'Order [' ), write(OrderFrame), write( '] already exists' ), nl.
+
+create_order(OrderFrame, _, Quantity) :-
+    \+ valid_order_quantity(Quantity), !,
+    write( 'Order [' ), write(OrderFrame), write( '] failed: invalid quantity (' ),
+    write(Quantity), write( ')' ), nl.
+
+create_order(OrderFrame, ProductFrame, _) :-
+    \+ valid_product_for_order(ProductFrame), !,
+    write( 'Order [' ), write(OrderFrame), write( '] failed: product [' ),
+    write(ProductFrame), write( '] not found or invalid' ), nl.
+
+create_order(OrderFrame, ProductFrame, Quantity) :-
+    get_value(ProductFrame, quantity, Stock),
+    Stock < Quantity, !,
+
+    getdate(D),
+    genmsg_general(stock_system, stock_unavailable, Quantity, warning, D),
+    write( 'Order [' ), write(OrderFrame), write( '] failed because of insufficient stock' ), nl.
+
+create_order(OrderFrame, ProductFrame, Quantity) :-
+    get_value(ProductFrame, quantity, Stock),
+    get_value(ProductFrame, unit_price, UnitPrice),
+
     Price is Quantity * UnitPrice,
     NewStock is Stock - Quantity,
 
@@ -488,24 +532,12 @@ create_order(OrderFrame, ProductFrame, Quantity) :-
     new_value(OrderFrame, included_products, ProductFrame),
     new_value(OrderFrame, quantity, Quantity),
     new_value(OrderFrame, price, Price),
-    new_value(OrderFrame, order_state, pending),                                    %Começa com state pending
+    new_value(OrderFrame, order_state, pending),
     write( 'Order [' ), write(OrderFrame), write( '] created successfully' ), nl.
-
-create_order(OrderFrame, ProductFrame, Quantity) :-
-    Quantity > 0,
-    get_value(ProductFrame, quantity, Stock),
-    Stock < Quantity,
-
-    getdate(D),
-    genmsg_general(stock_system, stock_unavailable, Quantity, warning, D).
-    write( 'Order [' ), write(OrderFrame), write( '] because of insufficient stock' ), nl.
-
-create_order(OrderFrame, _, _) :-
-    write( 'Order [' ), write(OrderFrame), write( '] failed: invalid quantity' ), nl.
 
 
 visualize_order(Id) :-
-    frame_exists(Id), !,
+    valid_order_frame(Id), !,
     show_frame(Id).
 
 visualize_order(Id) :-
@@ -517,9 +549,18 @@ valid_order_state(preparing).
 valid_order_state(shipped).
 valid_order_state(delivered).
 
+update_order_state(OrderFrame, _) :-
+    \+ valid_order_frame(OrderFrame), !,
+    write( 'Order [' ), write(OrderFrame), write( '] not found' ), nl.
+
 update_order_state(OrderFrame, NewState) :-
-    valid_order_state(NewState),
-    new_value(OrderFrame, order_state, NewState).
+    valid_order_state(NewState), !,
+    new_value(OrderFrame, order_state, NewState),
+    write( 'Order [' ), write(OrderFrame), write( '] state changed to ' ), write(NewState), nl.
+
+update_order_state(OrderFrame, NewState) :-
+    write( 'Order [' ), write(OrderFrame), write( '] failed: invalid state (' ),
+    write(NewState), write( ')' ), nl.
 
 % =========================
 % GENERAL ALARM DEFINITION
@@ -595,3 +636,13 @@ show_general_alarms_from(N) :-
     N1 is N - 1,
     show_general_alarms_from(N1).
 
+% =========================
+% MISC
+% =========================
+
+getdate(D) :-
+    get_time(T),
+    stamp_date_time(T, D, 'UTC').
+
+def_isa :-
+    new_relation(is_a, transitive, all, nil).

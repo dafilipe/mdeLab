@@ -111,7 +111,7 @@ def_controld :-
 
 
 controld(F, _S, T, T) :-
-    get_value(F,temp,Ta)
+    get_value(F,temp,Ta),
     get_value(F, li, Li),
     get_value(F, lai, Lai),
     get_value(F, ls, Ls),
@@ -151,7 +151,7 @@ malarm(T, Ta, _Li, Lai, _Ls, _Las) :-
     getdate(D),
     genmsg(T, freezing, D).
 
-malarm(_T, ,_Ta, _Li, _Lai, _Ls, _Las).
+malarm(_T, _Ta, _Li, _Lai, _Ls, _Las).
 
 genmsg(T, E, D) :-
     genname(N),
